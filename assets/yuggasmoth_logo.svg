@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <radialGradient id="bg" cx="40%" cy="35%" r="65%">
+      <stop offset="0%"   stop-color="#1c0d38"/>
+      <stop offset="100%" stop-color="#060410"/>
+    </radialGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="textglow" x="-20%" y="-60%" width="140%" height="220%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- ── Background ────────────────────────────────────────────────── -->
+  <circle cx="200" cy="200" r="196" fill="#06030e"/>
+  <circle cx="200" cy="200" r="185" fill="url(#bg)"/>
+  <circle cx="200" cy="200" r="192" fill="none" stroke="#3a1a6e" stroke-width="1.5"/>
+  <circle cx="200" cy="200" r="186" fill="none" stroke="#2a1055" stroke-width="0.6"/>
+
+  <!-- ── Stars ─────────────────────────────────────────────────────── -->
+  <g fill="#9988cc" opacity="0.55">
+    <circle cx="68"  cy="82"  r="1"/>
+    <circle cx="335" cy="68"  r="1.5"/>
+    <circle cx="82"  cy="318" r="1"/>
+    <circle cx="350" cy="310" r="1.5"/>
+    <circle cx="112" cy="358" r="1"/>
+    <circle cx="294" cy="363" r="1"/>
+    <circle cx="52"  cy="208" r="1"/>
+    <circle cx="373" cy="178" r="1"/>
+    <circle cx="314" cy="46"  r="1"/>
+    <circle cx="150" cy="41"  r="1.5"/>
+    <circle cx="40"  cy="148" r="1"/>
+    <circle cx="362" cy="248" r="1"/>
+    <circle cx="170" cy="368" r="1"/>
+    <circle cx="240" cy="35"  r="1"/>
+  </g>
+
+  <!-- ── Yuggoth orbital symbol ─────────────────────────────────────── -->
+  <!-- Outer planet (Yuggoth / Pluto) with a moon in orbit -->
+  <g transform="translate(200,60)">
+    <ellipse cx="0" cy="0" rx="33" ry="13"
+             fill="none" stroke="#5533aa" stroke-width="1.5" opacity="0.75"/>
+    <!-- axis line through ellipse -->
+    <line x1="-33" y1="0" x2="33" y2="0"
+          stroke="#3a2066" stroke-width="0.6" opacity="0.45"/>
+    <!-- Central dark planet -->
+    <circle cx="0" cy="0" r="7" fill="#2e1577" stroke="#6644cc" stroke-width="1.2"/>
+    <!-- Orbiting moon (bioluminescent, Mi-Go homeworld) -->
+    <circle cx="30" cy="-5" r="4.5" fill="#7755dd"
+            filter="url(#glow)" opacity="0.9"/>
+  </g>
+
+  <!-- ── Assembly scaffold visualization ───────────────────────────── -->
+  <!--  Each horizontal bar = one contig / scaffold                     -->
+  <!--  Colours:                                                        -->
+  <!--    teal   #2ec8a6 → clean, kept                                  -->
+  <!--    orange #ff7733 → contamination (fungal hyphae above)          -->
+  <!--    amber  #ffcc22 → rDNA / tRNA rich (hairpin loops above)       -->
+  <!--    purple #9966ee → duplicate (faded, copy indicator)            -->
+
+  <!-- Scaffold 1 — long, CLEAN -->
+  <rect x="115" y="96"  width="162" height="10" rx="5"
+        fill="#2ec8a6" filter="url(#glow)" opacity="0.88"/>
+
+  <!-- Scaffold 2 — medium, CONTAMINATED (orange + fungal hyphae) -->
+  <rect x="148" y="128" width="92"  height="10" rx="5"
+        fill="#ff7733" filter="url(#glow)"/>
+  <!-- Fungal hyphae sprouting upward from contaminated scaffold -->
+  <path d="M 168,128 Q 161,114 156,104"
+        fill="none" stroke="#ff7733" stroke-width="1.4" opacity="0.65"/>
+  <circle cx="155" cy="102" r="3.5" fill="#ff7733" opacity="0.55"/>
+  <path d="M 180,128 Q 183,114 190,107"
+        fill="none" stroke="#ff7733" stroke-width="1.4" opacity="0.65"/>
+  <circle cx="191" cy="105" r="3"   fill="#ff7733" opacity="0.55"/>
+  <path d="M 194,128 Q 201,116 207,109"
+        fill="none" stroke="#ff7733" stroke-width="1.3" opacity="0.58"/>
+  <circle cx="208" cy="107" r="2.5" fill="#ff7733" opacity="0.50"/>
+  <!-- Contamination flag marker (small right-pointing triangle) -->
+  <polygon points="246,125 246,138 255,131" fill="#ff7733" opacity="0.70"/>
+
+  <!-- Scaffold 3 — long, CLEAN -->
+  <rect x="108" y="160" width="188" height="10" rx="5"
+        fill="#2ec8a6" filter="url(#glow)" opacity="0.88"/>
+
+  <!-- Scaffold 4 — short, DUPLICATE (faded purple + copy indicator) -->
+  <rect x="132" y="192" width="56"  height="10" rx="5"
+        fill="#9966ee" opacity="0.42"/>
+  <!-- Copy indicator: two small stacked rectangles -->
+  <rect x="193" y="189" width="22" height="7" rx="2"
+        fill="none" stroke="#9966ee" stroke-width="1.1" opacity="0.58"/>
+  <rect x="197" y="193" width="22" height="7" rx="2"
+        fill="none" stroke="#9966ee" stroke-width="1.1" opacity="0.58"/>
+
+  <!-- Scaffold 5 — medium, rDNA-RICH (amber + rRNA hairpin loops) -->
+  <rect x="140" y="224" width="103" height="10" rx="5"
+        fill="#ffcc22" filter="url(#glow)" opacity="0.82"/>
+  <!-- rRNA hairpin loop indicators above scaffold -->
+  <path d="M 158,224 Q 153,211 158,207 Q 163,203 168,207 Q 173,211 168,224"
+        fill="none" stroke="#ffcc22" stroke-width="1.3" opacity="0.62"/>
+  <path d="M 180,224 Q 175,211 180,207 Q 185,203 190,207 Q 195,211 190,224"
+        fill="none" stroke="#ffcc22" stroke-width="1.3" opacity="0.62"/>
+  <path d="M 202,224 Q 197,211 202,207 Q 207,203 212,207 Q 217,211 212,224"
+        fill="none" stroke="#ffcc22" stroke-width="1.2" opacity="0.52"/>
+  <!-- rDNA flag marker -->
+  <polygon points="249,221 249,234 258,227" fill="#ffcc22" opacity="0.70"/>
+
+  <!-- Scaffold 6 — medium, CLEAN -->
+  <rect x="122" y="256" width="148" height="10" rx="5"
+        fill="#2ec8a6" filter="url(#glow)" opacity="0.82"/>
+
+  <!-- ── Colour legend ──────────────────────────────────────────────── -->
+  <g font-family="'Courier New', Courier, monospace" font-size="8.5" fill="#776699">
+    <circle cx="120" cy="282" r="3.5" fill="#2ec8a6" opacity="0.80"/>
+    <text x="127" y="285">clean</text>
+    <circle cx="163" cy="282" r="3.5" fill="#ff7733" opacity="0.80"/>
+    <text x="170" y="285">contam.</text>
+    <circle cx="218" cy="282" r="3.5" fill="#ffcc22" opacity="0.80"/>
+    <text x="225" y="285">rDNA/tRNA</text>
+    <circle cx="283" cy="282" r="3.5" fill="#9966ee" opacity="0.55"/>
+    <text x="290" y="285">dup.</text>
+  </g>
+
+  <!-- Separator line -->
+  <line x1="105" y1="295" x2="295" y2="295"
+        stroke="#2a1a50" stroke-width="0.8"/>
+
+  <!-- ── Title ──────────────────────────────────────────────────────── -->
+  <text x="200" y="321"
+        font-family="'Courier New', Courier, monospace"
+        font-size="27"
+        font-weight="bold"
+        fill="#ddd8ff"
+        text-anchor="middle"
+        letter-spacing="1.5"
+        filter="url(#textglow)">YuggASMoth</text>
+
+  <!-- Subtitle -->
+  <text x="200" y="342"
+        font-family="'Courier New', Courier, monospace"
+        font-size="9.5"
+        fill="#6655aa"
+        text-anchor="middle"
+        letter-spacing="1.2">Assembly  ·  Surgical  ·  Extraction</text>
+
+</svg>
