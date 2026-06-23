@@ -616,6 +616,7 @@ def write_run_summary(args, seqs: dict, cleaned: dict | None,
             "rDNA_tRNA":      not args.skip_rDNA_tRNA,
             "contamination":  not args.skip_contamination,
             "duplications":   not args.skip_duplications,
+            "filtering":      not args.skip_filtering,
         },
     }
     path = Path(f"{output_base}.run_summary.json")
@@ -661,6 +662,9 @@ def main(argv=None):
                     help="Skip MMseqs2 contamination module")
     ap.add_argument("--skip_duplications",  action="store_true",
                     help="Skip Mash duplication module")
+    ap.add_argument("--skip_filtering",     action="store_true",
+                    help="Produce flagging tables and plots only; "
+                         "do not write a cleaned FASTA or removal log")
 
     # Output
     ap.add_argument("--format",  default="pdf",
@@ -732,17 +736,22 @@ def main(argv=None):
         plot_duplications(dup_pairs, seqs, out_base, formats, args.dup_similarity)
 
     # ── Module 4: Filtering ───────────────────────────────────────────────────
-    _banner("Module 4: Filtering")
-    cleaned, removal_log = apply_filters(
-        seqs, rdna_rows, contam_rows, dup_pairs,
-        args.rDNA_perc, args.tDNA_perc, contam_taxa, args.dup_similarity,
-    )
-    cleaned_fasta = Path(f"{out_base}.cleaned.fasta")
-    removal_tsv   = Path(f"{out_base}.removed.tsv")
-    write_fasta(cleaned, cleaned_fasta)
-    write_removal_log(removal_log, removal_tsv)
-    _log(f"  Cleaned FASTA → {cleaned_fasta}")
-    _log(f"  {len(seqs)} input → {len(cleaned)} kept, {len(removal_log)} removed")
+    cleaned      = None
+    removal_log  = None
+    if not args.skip_filtering:
+        _banner("Module 4: Filtering")
+        cleaned, removal_log = apply_filters(
+            seqs, rdna_rows, contam_rows, dup_pairs,
+            args.rDNA_perc, args.tDNA_perc, contam_taxa, args.dup_similarity,
+        )
+        cleaned_fasta = Path(f"{out_base}.cleaned.fasta")
+        removal_tsv   = Path(f"{out_base}.removed.tsv")
+        write_fasta(cleaned, cleaned_fasta)
+        write_removal_log(removal_log, removal_tsv)
+        _log(f"  Cleaned FASTA → {cleaned_fasta}")
+        _log(f"  {len(seqs)} input → {len(cleaned)} kept, {len(removal_log)} removed")
+    else:
+        _log("Filtering skipped (--skip_filtering); inspect tables before re-running.")
 
     # ── Run summary ───────────────────────────────────────────────────────────
     write_run_summary(args, seqs, cleaned, removal_log, out_base)
