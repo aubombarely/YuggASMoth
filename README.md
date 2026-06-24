@@ -297,3 +297,70 @@ python3 examples/generate_example_outputs.py
 - **MMseqs2 easy-taxonomy** translates sequences in all 6 frames and searches against the provided protein database; the LCA algorithm assigns a taxonomy per sequence. Run with `--tax-lineage 2` so the lineage column contains taxon names (not numeric IDs), which enables correct substring matching in contamination filtering.
 - **Mash** uses MinHash sketches (default sketch size 1000) for fast all-vs-all pairwise distance estimation. Similarity = 1 − Mash distance. When a duplicate pair is flagged, the shorter sequence is removed; the longer is kept.
 - All intermediate files are stored in `{output}/workdir/` and can be safely deleted after a successful run.
+
+---
+
+## Third-party tools and citations
+
+YuggASMoth relies on the following tools. Please cite them in addition to
+YuggASMoth when you use this pipeline in published work.
+
+### barrnap
+
+Rapid ribosomal RNA gene prediction using HMMER3 profiles for 5S, 5.8S,
+18S, and 28S rRNA.
+
+> Seemann T. *barrnap: rapid ribosomal RNA prediction.*
+> GitHub repository. https://github.com/tseemann/barrnap
+
+### tRNAscan-SE
+
+Detection and functional classification of transfer RNA genes in genomic
+sequences.
+
+> Chan PP, Lin BY, Mak AJ, Lowe TM. (2021) tRNAscan-SE 2.0: improved
+> detection and functional classification of transfer RNA genes.
+> *Nucleic Acids Research*, 49(16):e99.
+> doi: [10.1093/nar/gkab688](https://doi.org/10.1093/nar/gkab688)
+
+> Chan PP, Lowe TM. (2019) tRNAscan-SE: Searching for tRNA Genes in
+> Genomic Sequences. *Methods in Molecular Biology*, 1962:1–14.
+> doi: [10.1007/978-1-4939-9173-0_1](https://doi.org/10.1007/978-1-4939-9173-0_1)
+
+Repository: https://github.com/UCSC-LoweLab/tRNAscan-SE
+
+### MMseqs2
+
+Sensitive protein sequence searching and taxonomic classification for large
+datasets. YuggASMoth uses the `easy-taxonomy` workflow with LCA assignment.
+
+> Steinegger M, Söding J. (2017) MMseqs2 enables sensitive protein sequence
+> searching for the analysis of massive data sets.
+> *Nature Biotechnology*, 35:1026–1028.
+> doi: [10.1038/nbt.3988](https://doi.org/10.1038/nbt.3988)
+
+Repository: https://github.com/soedinglab/MMseqs2
+
+### Mash
+
+Fast genome and metagenome distance estimation using MinHash sketches.
+YuggASMoth uses `mash sketch` + `mash triangle` for all-vs-all pairwise
+similarity.
+
+> Ondov BD, Treangen TJ, Melsted P, Mallonee AB, Bergman NH, Koren S,
+> Phillippy AM. (2016) Mash: fast genome and metagenome distance estimation
+> using MinHash. *Genome Biology*, 17:132.
+> doi: [10.1186/s13059-016-0997-x](https://doi.org/10.1186/s13059-016-0997-x)
+
+Repository: https://github.com/marbl/Mash
+
+### CodeCarbon *(optional)*
+
+Estimates and tracks CO₂ equivalent emissions and energy consumption of
+computational workflows.
+
+> Courty V, Schmidt V, Lottick K, et al. (2023) *CodeCarbon: Estimate and
+> Track Carbon Emissions from Machine Learning Computing.*
+> Zenodo. doi: [10.5281/zenodo.3634573](https://doi.org/10.5281/zenodo.3634573)
+
+Repository: https://github.com/mlco2/codecarbon
