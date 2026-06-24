@@ -69,9 +69,9 @@ Any MMseqs2-compatible taxonomy database (e.g. UniProt, nr) can be used via `--d
 ## Usage
 
 ```
-YuggASMoth.py --fasta <assembly.fasta> --output <basename> --db <mmseqs2_db>
+YuggASMoth.py --fasta <assembly.fasta> --output <run_dir> --db <mmseqs2_db>
               [--threads 8]
-              [--rDNA_perc 50] [--tDNA_perc 50]
+              [--rDNA_perc 10] [--tDNA_perc 10]
               [--contam_taxa Bacteria,Viruses,Fungi]
               [--dup_similarity 0.95]
               [--skip_rDNA_tRNA] [--skip_contamination] [--skip_duplications]
@@ -84,7 +84,7 @@ YuggASMoth.py --fasta <assembly.fasta> --output <basename> --db <mmseqs2_db>
 | Flag | Default | Description |
 |---|---|---|
 | `--fasta` | required | Input genome assembly FASTA |
-| `--output` | required | Output basename / prefix |
+| `--output` | required | Output directory (created if absent; subdirs `results/`, `workdir/`, `logs/` are created inside) |
 | `--db` | required* | MMseqs2 taxonomy database (*unless `--skip_contamination`) |
 | `--threads` | `8` | CPU threads |
 | `--rDNA_perc` | `10.0` | Flag sequences with % rDNA above this value |
@@ -123,6 +123,41 @@ yugg_run/
 └── logs/
     ├── Run_YuggASMoth.log               Full run log (date, user, command, progress)
     └── yugg_run.emissions.csv           Carbon footprint (requires codecarbon)
+```
+
+### Run log
+
+`logs/Run_YuggASMoth.log` is written on every run and contains:
+
+- Date and time, username, and working directory
+- The exact command used to invoke the pipeline
+- Timestamped progress messages from each module (same as stderr)
+- Wall-clock runtime, peak RSS memory, and carbon footprint summary at the end
+
+### Run summary (`run_summary.json`)
+
+| Field | Description |
+|---|---|
+| `date` | Run timestamp |
+| `version` | YuggASMoth version |
+| `input_fasta` | Path to the input FASTA |
+| `n_input_sequences` | Total sequences in the input |
+| `n_cleaned_sequences` | Sequences retained after filtering (null if `--skip_filtering`) |
+| `n_removed` | Sequences removed (null if `--skip_filtering`) |
+| `parameters` | All threshold and module parameters used |
+| `modules_run` | Which modules were active |
+| `resource_usage.wall_clock_s` | Total wall-clock time (seconds) |
+| `resource_usage.peak_mem_mb` | Peak RSS memory (MB) |
+| `resource_usage.emissions_kg_CO2eq` | Carbon footprint (null if codecarbon not installed) |
+
+### Carbon footprint (`logs/{prefix}.emissions.csv`)
+
+Written by [CodeCarbon](https://github.com/mlco2/codecarbon) when the
+`codecarbon` package is installed. Contains energy consumption (kWh),
+emissions (kg CO2eq), duration, and hardware details per run. Requires:
+
+```bash
+conda install -c conda-forge codecarbon
 ```
 
 ### rDNA / tRNA table columns
@@ -250,7 +285,7 @@ python3 examples/generate_example_outputs.py
 ## Notes
 
 - **barrnap** scans for 5S, 5.8S, 18S, and 28S rRNA using HMMER models. Eukaryotic mode (`--kingdom euk`) is the default.
-- **tRNAscan-SE** is run in eukaryotic mode (`-E`). The secondary structure file is saved to `{workdir}/trnascan.ss`.
-- **MMseqs2 easy-taxonomy** translates sequences in all 6 frames and searches against the provided protein database; the LCA (Lowest Common Ancestor) algorithm assigns a taxonomy per sequence.
+- **tRNAscan-SE** is run in eukaryotic mode (`-E`). The secondary structure file is saved to `{output}/workdir/trnascan.ss`.
+- **MMseqs2 easy-taxonomy** translates sequences in all 6 frames and searches against the provided protein database; the LCA algorithm assigns a taxonomy per sequence. Run with `--tax-lineage 2` so the lineage column contains taxon names (not numeric IDs), which enables correct substring matching in contamination filtering.
 - **Mash** uses MinHash sketches (default sketch size 1000) for fast all-vs-all pairwise distance estimation. Similarity = 1 − Mash distance. When a duplicate pair is flagged, the shorter sequence is removed; the longer is kept.
-- All intermediate files are stored in `{output}_workdir/` and can be safely deleted after a successful run.
+- All intermediate files are stored in `{output}/workdir/` and can be safely deleted after a successful run.
