@@ -5,6 +5,17 @@ Dates follow ISO 8601 (YYYY-MM-DD). Changes are grouped by version and type.
 
 ---
 
+## [v0.2.1] — 2026-06-24
+
+### Added
+
+- **Run log — server name and OS** (`logs/Run_YuggASMoth.log`): the log
+  header now records the server hostname (`platform.node()`) and OS details
+  (system, release, architecture) after the username, making it easier to
+  trace runs across different compute environments.
+
+---
+
 ## [v0.2.0] — 2026-06-24
 
 ### Added

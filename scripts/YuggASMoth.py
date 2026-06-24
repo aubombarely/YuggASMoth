@@ -65,7 +65,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-VERSION = "v0.2.0"
+VERSION = "v0.2.1"
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -714,6 +714,8 @@ def main(argv=None):
     _LOG_FH.write(f"{sep}\n  YuggASMoth {VERSION}  —  Run Log\n{sep}\n")
     _LOG_FH.write(f"Date      : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     _LOG_FH.write(f"User      : {getpass.getuser()}\n")
+    _LOG_FH.write(f"Server    : {platform.node()}\n")
+    _LOG_FH.write(f"OS        : {platform.system()} {platform.release()} ({platform.machine()})\n")
     _LOG_FH.write(f"Directory : {os.getcwd()}\n")
     _LOG_FH.write(f"Command   : {' '.join(sys.argv)}\n")
     _LOG_FH.write(f"{sep}\n\n")
