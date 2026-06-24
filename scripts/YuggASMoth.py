@@ -251,7 +251,7 @@ def run_mmseqs_taxonomy(fasta: Path, db: str, out_dir: Path,
 
     _run([tool, "easy-taxonomy", str(fasta), db, str(prefix),
           str(tmp), "--threads", str(threads),
-          "--tax-lineage", "1"])
+          "--tax-lineage", "2"])
 
     # easy-taxonomy writes {prefix}_tophit_report and {prefix}_lca.tsv
     lca_tsv = Path(f"{prefix}_lca.tsv")
@@ -519,14 +519,14 @@ def plot_contamination(rows: list, output_base: str, formats: list,
     import matplotlib.pyplot as plt
     from collections import Counter
 
-    # Count sequences per top kingdom/phylum (first informative lineage level)
+    # Group sequences by the MMseqs2 LCA taxon name (top_taxon).
+    # Using top_taxon directly is more reliable than parsing the lineage string,
+    # which can contain numeric taxon IDs depending on the --tax-lineage flag.
     def _top_group(row):
-        lineage = row["lineage"]
-        if not lineage or lineage == "unclassified":
+        name = (row.get("top_taxon") or "").strip()
+        if not name or name in ("0", "unclassified", "no rank"):
             return "Unclassified"
-        parts = [p.strip() for p in lineage.split(";") if p.strip()]
-        # Return the second non-root level if available
-        return parts[1] if len(parts) > 1 else parts[0]
+        return name
 
     counts = Counter(_top_group(r) for r in rows)
     labels = [k for k, _ in counts.most_common(15)]

@@ -196,6 +196,42 @@ YuggASMoth.py --fasta assembly.fasta --output yugg_out \
 
 ---
 
+## Test data and examples
+
+A small synthetic assembly and pre-generated example outputs are included in
+the repository to help you verify the installation and understand each module's
+output before running on real data.
+
+### Quick test (no taxonomy database needed)
+
+```bash
+conda activate yuggasmoth
+
+python3 scripts/YuggASMoth.py \
+    --fasta test/test_assembly.fasta \
+    --output test_run/test \
+    --skip_contamination \
+    --skip_filtering \
+    --format png \
+    --threads 2
+```
+
+See [`test/README.md`](test/README.md) for a description of each test sequence
+and the expected outputs.
+
+### Example figures with explanations
+
+Annotated plots illustrating what each module's output looks like are in
+[`examples/README.md`](examples/README.md). The figures and accompanying TSV
+tables were generated from realistic synthetic data; re-generate at any time
+with:
+
+```bash
+python3 examples/generate_example_outputs.py
+```
+
+---
+
 ## Notes
 
 - **barrnap** scans for 5S, 5.8S, 18S, and 28S rRNA using HMMER models. Eukaryotic mode (`--kingdom euk`) is the default.
