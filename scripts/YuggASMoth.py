@@ -65,7 +65,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-VERSION = "v0.2.1"
+VERSION = "v0.3.0"
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -96,6 +96,14 @@ def _require_tool(name: str) -> str:
               f"Install with: conda install -c bioconda {name}", file=sys.stderr)
         sys.exit(1)
     return path
+
+
+def _checkpoint(path: Path, label: str, force: bool) -> bool:
+    """Return True (skip this step) when output already exists and --force is off."""
+    if not force and path.exists() and path.stat().st_size > 0:
+        _log(f"  [checkpoint] {label} — {path.name} already exists, skipping")
+        return True
+    return False
 
 
 def _run(cmd: list, capture_stdout: bool = False,
@@ -149,7 +157,10 @@ def write_fasta(seqs: dict, path: Path, line_width: int = 60) -> None:
 
 # ── Module 1: rDNA / tRNA ─────────────────────────────────────────────────────
 
-def run_barrnap(fasta: Path, out_gff: Path, workdir: Path, threads: int) -> None:
+def run_barrnap(fasta: Path, out_gff: Path, workdir: Path,
+                threads: int, force: bool) -> None:
+    if _checkpoint(out_gff, "barrnap", force):
+        return
     tool = _require_tool("barrnap")
     # Run with cwd=workdir so any side-effect files barrnap creates (e.g.
     # barrnap.bed) are written there rather than in the current directory.
@@ -161,7 +172,9 @@ def run_barrnap(fasta: Path, out_gff: Path, workdir: Path, threads: int) -> None
 
 
 def run_trnascan(fasta: Path, out_tsv: Path, out_ss: Path,
-                 threads: int) -> None:
+                 threads: int, force: bool) -> None:
+    if _checkpoint(out_tsv, "tRNAscan-SE", force):
+        return
     tool = _require_tool("tRNAscan-SE")
     _run([tool, "-E", "-o", str(out_tsv), "-f", str(out_ss),
           "--thread", str(threads), str(fasta)])
@@ -270,17 +283,19 @@ def write_rDNA_tRNA_table(rows: list, path: Path) -> None:
 # ── Module 2: Contamination (MMseqs2) ─────────────────────────────────────────
 
 def run_mmseqs_taxonomy(fasta: Path, db: str, workdir: Path,
-                        threads: int) -> Path:
-    tool   = _require_tool("mmseqs")
-    tmp    = workdir / "mmseqs_tmp"
+                        threads: int, force: bool) -> Path:
+    prefix  = workdir / "mmseqs_taxonomy"
+    lca_tsv = Path(f"{prefix}_lca.tsv")
+    if _checkpoint(lca_tsv, "MMseqs2 easy-taxonomy", force):
+        return lca_tsv
+    tool = _require_tool("mmseqs")
+    tmp  = workdir / "mmseqs_tmp"
     tmp.mkdir(parents=True, exist_ok=True)
-    prefix = workdir / "mmseqs_taxonomy"
 
     _run([tool, "easy-taxonomy", str(fasta), db, str(prefix),
           str(tmp), "--threads", str(threads),
           "--tax-lineage", "2"])
 
-    lca_tsv = Path(f"{prefix}_lca.tsv")
     if not lca_tsv.exists():
         print(f"ERROR: MMseqs2 LCA output not found: {lca_tsv}", file=sys.stderr)
         sys.exit(1)
@@ -338,19 +353,22 @@ def write_contamination_table(rows: list, path: Path) -> None:
 # ── Module 3: Duplication (Mash) ──────────────────────────────────────────────
 
 def run_mash(fasta: Path, workdir: Path, threads: int,
-             sketch_size: int = 1000) -> Path:
-    tool      = _require_tool("mash")
-    sketch    = workdir / "assembly.msh"
-    dist_tsv  = workdir / "mash_triangle.tsv"
+             sketch_size: int = 1000, force: bool = False) -> Path:
+    tool     = _require_tool("mash")
+    sketch   = workdir / "assembly.msh"
+    dist_tsv = workdir / "mash_triangle.tsv"
 
-    _run([tool, "sketch", "-s", str(sketch_size),
-          "-p", str(threads), "-o", str(sketch), str(fasta)])
-    _log(f"  Mash sketch → {sketch}")
+    if not _checkpoint(sketch, "mash sketch", force):
+        _run([tool, "sketch", "-s", str(sketch_size),
+              "-p", str(threads), "-o", str(sketch), str(fasta)])
+        _log(f"  Mash sketch → {sketch}")
 
-    result = _run([tool, "triangle", "-p", str(threads), str(sketch)],
-                  capture_stdout=True)
-    dist_tsv.write_text(result.stdout)
-    _log(f"  Mash triangle → {dist_tsv}")
+    if not _checkpoint(dist_tsv, "mash triangle", force):
+        result = _run([tool, "triangle", "-p", str(threads), str(sketch)],
+                      capture_stdout=True)
+        dist_tsv.write_text(result.stdout)
+        _log(f"  Mash triangle → {dist_tsv}")
+
     return dist_tsv
 
 
@@ -680,6 +698,10 @@ def main(argv=None):
                     help="Disable carbon footprint tracking even if "
                          "codecarbon is installed (default: tracking is on "
                          "when codecarbon is available)")
+    ap.add_argument("--force", action="store_true",
+                    help="Force rerun all steps even if intermediate outputs "
+                         "already exist in workdir/ (default: resume from "
+                         "existing checkpoints)")
 
     # Output
     ap.add_argument("--format",  default="pdf",
@@ -754,6 +776,12 @@ def main(argv=None):
     _log(f"  workdir/ → intermediate tool outputs")
     _log(f"  logs/    → run log and carbon footprint")
 
+    if args.force:
+        _log("--force set: all steps will rerun regardless of existing outputs")
+    elif any(workdir.iterdir()) if workdir.exists() else False:
+        _log("Existing workdir found — resuming from checkpoints "
+             "(use --force to rerun all steps from scratch)")
+
     _log("Loading assembly ...")
     seqs = load_fasta(args.fasta)
     _log(f"  {len(seqs)} sequences loaded")
@@ -771,8 +799,8 @@ def main(argv=None):
         out_tsv       = results / f"mod01_rDNAtDNA_{prefix}.tsv"
         out_fig       = results / f"mod01_rDNAtDNA_{prefix}"
 
-        run_barrnap(args.fasta, barrnap_gff, workdir, args.threads)
-        run_trnascan(args.fasta, trnascan_tsv, trnascan_ss, args.threads)
+        run_barrnap(args.fasta, barrnap_gff, workdir, args.threads, args.force)
+        run_trnascan(args.fasta, trnascan_tsv, trnascan_ss, args.threads, args.force)
         rdna_rows = build_rDNA_tRNA_table(seqs, barrnap_gff, trnascan_tsv)
         write_rDNA_tRNA_table(rdna_rows, out_tsv)
         plot_rDNA_tRNA(rdna_rows, out_fig, formats, args.rDNA_perc, args.tDNA_perc)
@@ -783,7 +811,7 @@ def main(argv=None):
         out_tsv = results / f"mod02_contamination_{prefix}.tsv"
         out_fig = results / f"mod02_contamination_{prefix}"
 
-        lca_tsv     = run_mmseqs_taxonomy(args.fasta, args.db, workdir, args.threads)
+        lca_tsv     = run_mmseqs_taxonomy(args.fasta, args.db, workdir, args.threads, args.force)
         contam_rows = parse_mmseqs_lca(lca_tsv, seqs)
         write_contamination_table(contam_rows, out_tsv)
         plot_contamination(contam_rows, out_fig, formats, contam_taxa)
@@ -794,7 +822,7 @@ def main(argv=None):
         out_tsv  = results / f"mod03_duplications_{prefix}.tsv"
         out_fig  = results / f"mod03_duplications_{prefix}"
 
-        dist_tsv  = run_mash(args.fasta, workdir, args.threads)
+        dist_tsv  = run_mash(args.fasta, workdir, args.threads, force=args.force)
         dup_pairs = parse_mash_triangle(dist_tsv, seqs, args.dup_similarity)
         write_duplication_table(dup_pairs, out_tsv)
         plot_duplications(dup_pairs, seqs, out_fig, formats, args.dup_similarity)

@@ -5,6 +5,25 @@ Dates follow ISO 8601 (YYYY-MM-DD). Changes are grouped by version and type.
 
 ---
 
+## [v0.3.0] — 2026-06-24
+
+### Added
+
+- **Checkpoint / resume logic** — before running each external tool, YuggASMoth
+  checks whether its output file already exists and is non-empty in `workdir/`.
+  If so, the tool is skipped and a `[checkpoint]` message is logged. This means
+  re-running the same command after an interrupted run continues from where it
+  left off rather than starting from scratch. Checkpointed steps:
+  - Module 1: `barrnap.gff3` (barrnap) and `trnascan.tsv` (tRNAscan-SE)
+  - Module 2: `mmseqs_taxonomy_lca.tsv` (MMseqs2 easy-taxonomy)
+  - Module 3: `assembly.msh` (Mash sketch) and `mash_triangle.tsv` (Mash triangle)
+  - Parsing, table writing, filtering, and figure generation always run so
+    that results reflect the current thresholds even on a resume.
+- **`--force` flag** — bypasses all checkpoints and reruns every step from
+  scratch, overwriting existing `workdir/` outputs.
+
+---
+
 ## [v0.2.1] — 2026-06-24
 
 ### Added

@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v0.2.1-teal" alt="Version v0.2.1"/>
+  <img src="https://img.shields.io/badge/version-v0.3.0-teal" alt="Version v0.3.0"/>
   <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+"/>
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey" alt="Platform"/>
 </p>
@@ -106,6 +106,7 @@ YuggASMoth.py --fasta <assembly.fasta> --output <run_dir> --db <mmseqs2_db>
 | `--skip_duplications` | off | Skip Module 3 |
 | `--skip_filtering` | off | Skip Module 4 — produce tables/plots only |
 | `--disable_co2_tracking` | off | Disable carbon footprint tracking even if `codecarbon` is installed |
+| `--force` | off | Rerun all steps from scratch even if intermediate outputs exist in `workdir/` |
 | `--format` | `pdf` | Plot format(s): `pdf`, `png`, `svg` (comma-separated) |
 
 ---
@@ -232,7 +233,29 @@ YuggASMoth.py \
 ```
 
 Review the tables and plots under `yugg_inspect/results/` to decide on
-thresholds.  The full run log is at `yugg_inspect/logs/Run_YuggASMoth.log`.
+thresholds. The full run log is at `yugg_inspect/logs/Run_YuggASMoth.log`.
+
+### Checkpoint / resume behaviour
+
+YuggASMoth checks whether each tool's output already exists in `workdir/`
+before running it. If a previous run was interrupted, re-running the **exact
+same command** will skip completed steps and continue from where it left off:
+
+```
+[checkpoint] barrnap       — barrnap.gff3 already exists, skipping
+[checkpoint] tRNAscan-SE   — trnascan.tsv already exists, skipping
+[checkpoint] MMseqs2 ...   — mmseqs_taxonomy_lca.tsv already exists, skipping
+```
+
+Parsing, table writing, filtering, and figure generation always run so that
+results files reflect the current thresholds even on a resume.
+
+To force a full rerun from scratch:
+
+```bash
+YuggASMoth.py --fasta assembly.fasta --output yugg_run --db /path/to/db \
+              --force
+```
 
 ### Step 2 — Apply thresholds and clean
 
