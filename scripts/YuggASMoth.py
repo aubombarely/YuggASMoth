@@ -43,11 +43,13 @@ Usage
 -----
     YuggASMoth.py --fasta assembly.fasta --output yugg_run --db mmseqs2_db
     YuggASMoth.py --fasta assembly.fasta --output yugg_run --db mmseqs2_db \\
-                  --threads 16 --rDNA_perc 50 --tDNA_perc 50 \\
+                  --threads 16 --rDNA_perc 10 --tDNA_perc 10 \\
                   --contam_taxa Fungi,Bacteria,Viruses \\
                   --dup_similarity 0.95 --format pdf,png
     YuggASMoth.py --fasta assembly.fasta --output yugg_run \\
                   --skip_contamination --skip_duplications
+    YuggASMoth.py --fasta assembly.fasta --output yugg_run --db mmseqs2_db \\
+                  --disable_co2_tracking
 """
 
 import argparse
@@ -670,6 +672,10 @@ def main(argv=None):
     ap.add_argument("--skip_filtering",     action="store_true",
                     help="Produce flagging tables and plots only; "
                          "do not write a cleaned FASTA or removal log")
+    ap.add_argument("--disable_co2_tracking", action="store_true",
+                    help="Disable carbon footprint tracking even if "
+                         "codecarbon is installed (default: tracking is on "
+                         "when codecarbon is available)")
 
     # Output
     ap.add_argument("--format",  default="pdf",
@@ -713,21 +719,24 @@ def main(argv=None):
     _LOG_FH.write(f"{sep}\n\n")
     _LOG_FH.flush()
 
-    # ── Carbon footprint tracker (optional) ───────────────────────────────────
+    # ── Carbon footprint tracker (on by default; skipped if --disable_co2_tracking) ─
     _tracker = None
-    try:
-        from codecarbon import EmissionsTracker
-        _tracker = EmissionsTracker(
-            output_dir=str(logs_dir),
-            output_file=f"{prefix}.emissions.csv",
-            project_name="YuggASMoth",
-            log_level="warning",
-        )
-        _tracker.start()
-        _log("  codecarbon tracker started")
-    except ImportError:
-        _log("  codecarbon not installed — carbon tracking skipped "
-             "(conda install -c conda-forge codecarbon)")
+    if args.disable_co2_tracking:
+        _log("  Carbon footprint tracking disabled (--disable_co2_tracking)")
+    else:
+        try:
+            from codecarbon import EmissionsTracker
+            _tracker = EmissionsTracker(
+                output_dir=str(logs_dir),
+                output_file=f"{prefix}.emissions.csv",
+                project_name="YuggASMoth",
+                log_level="warning",
+            )
+            _tracker.start()
+            _log("  codecarbon tracker started")
+        except ImportError:
+            _log("  codecarbon not installed — carbon tracking skipped "
+                 "(conda install -c conda-forge codecarbon)")
 
     t_start = time.monotonic()
 

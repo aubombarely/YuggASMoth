@@ -95,6 +95,7 @@ YuggASMoth.py --fasta <assembly.fasta> --output <run_dir> --db <mmseqs2_db>
 | `--skip_contamination` | off | Skip Module 2 |
 | `--skip_duplications` | off | Skip Module 3 |
 | `--skip_filtering` | off | Skip Module 4 — produce tables/plots only |
+| `--disable_co2_tracking` | off | Disable carbon footprint tracking even if `codecarbon` is installed |
 | `--format` | `pdf` | Plot format(s): `pdf`, `png`, `svg` (comma-separated) |
 
 ---
@@ -152,12 +153,19 @@ yugg_run/
 
 ### Carbon footprint (`logs/{prefix}.emissions.csv`)
 
-Written by [CodeCarbon](https://github.com/mlco2/codecarbon) when the
-`codecarbon` package is installed. Contains energy consumption (kWh),
-emissions (kg CO2eq), duration, and hardware details per run. Requires:
+Written by [CodeCarbon](https://github.com/mlco2/codecarbon) automatically
+when the `codecarbon` package is installed. Contains energy consumption (kWh),
+emissions (kg CO2eq), duration, and hardware details per run.
 
 ```bash
-conda install -c conda-forge codecarbon
+conda install -c conda-forge codecarbon   # enable tracking
+```
+
+To run the pipeline without tracking even when `codecarbon` is installed:
+
+```bash
+YuggASMoth.py --fasta assembly.fasta --output yugg_run --db /path/to/db \
+              --disable_co2_tracking
 ```
 
 ### rDNA / tRNA table columns
