@@ -48,5 +48,5 @@ Apply those standards to any changes or additions here.
 
 - [x] `LICENSE` — MIT, added 2026-06-24
 - [x] `CITATION.cff` — author, ORCID, version, keywords, repository URL
-- [ ] Zenodo DOI — mint after first public release; add `doi:` field to `CITATION.cff`
+- [x] Zenodo DOI — `10.5281/zenodo.20828338` (added to `CITATION.cff`)
 - [ ] bio.tools registration — register after first public release
