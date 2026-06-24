@@ -99,7 +99,7 @@ def _require_tool(name: str) -> str:
 
 
 def _run(cmd: list, capture_stdout: bool = False,
-         env: dict = None) -> subprocess.CompletedProcess:
+         env: dict = None, cwd: Path = None) -> subprocess.CompletedProcess:
     _log(f"  $ {' '.join(str(c) for c in cmd)}")
     result = subprocess.run(
         cmd,
@@ -107,6 +107,7 @@ def _run(cmd: list, capture_stdout: bool = False,
         stderr=subprocess.PIPE,
         text=True,
         env=env,
+        cwd=cwd,
     )
     if result.returncode != 0:
         print(f"ERROR: command failed (exit {result.returncode}):\n"
@@ -148,10 +149,13 @@ def write_fasta(seqs: dict, path: Path, line_width: int = 60) -> None:
 
 # ── Module 1: rDNA / tRNA ─────────────────────────────────────────────────────
 
-def run_barrnap(fasta: Path, out_gff: Path, threads: int) -> None:
+def run_barrnap(fasta: Path, out_gff: Path, workdir: Path, threads: int) -> None:
     tool = _require_tool("barrnap")
+    # Run with cwd=workdir so any side-effect files barrnap creates (e.g.
+    # barrnap.bed) are written there rather than in the current directory.
+    # Use the resolved absolute FASTA path so barrnap can find it from workdir.
     result = _run([tool, "--threads", str(threads), "--outseq", "/dev/null",
-                   str(fasta)], capture_stdout=True)
+                   str(fasta.resolve())], capture_stdout=True, cwd=workdir)
     out_gff.write_text(result.stdout)
     _log(f"  barrnap GFF3 → {out_gff}")
 
@@ -767,7 +771,7 @@ def main(argv=None):
         out_tsv       = results / f"mod01_rDNAtDNA_{prefix}.tsv"
         out_fig       = results / f"mod01_rDNAtDNA_{prefix}"
 
-        run_barrnap(args.fasta, barrnap_gff, args.threads)
+        run_barrnap(args.fasta, barrnap_gff, workdir, args.threads)
         run_trnascan(args.fasta, trnascan_tsv, trnascan_ss, args.threads)
         rdna_rows = build_rDNA_tRNA_table(seqs, barrnap_gff, trnascan_tsv)
         write_rDNA_tRNA_table(rdna_rows, out_tsv)
