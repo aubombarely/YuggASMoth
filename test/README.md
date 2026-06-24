@@ -43,12 +43,17 @@ python3 scripts/YuggASMoth.py \
 Expected output:
 
 ```
-test_run/test.rDNA_tRNA.tsv     # contig_003 flagged (perc_rDNA ~29%)
-                                #  contig_004 flagged (perc_tDNA ~10%)
-test_run/test.rDNA_tRNA.png
-test_run/test.duplications.tsv  # contig_005 flagged as duplicate of contig_001
-test_run/test.duplications.png
-test_run/test.run_summary.json
+test_run/
+├── results/
+│   ├── mod01_rDNAtDNA_test_run.tsv   # contig_003 flagged (perc_rDNA ~29%)
+│   │                                 # contig_004 flagged (perc_tDNA ~10%)
+│   ├── mod01_rDNAtDNA_test_run.png
+│   ├── mod03_duplications_test_run.tsv  # contig_005 flagged as dup of contig_001
+│   ├── mod03_duplications_test_run.png
+│   └── test_run.run_summary.json
+├── workdir/                          # barrnap GFF3, tRNAscan TSV, Mash files
+└── logs/
+    └── Run_YuggASMoth.log
 ```
 
 ### All modules (requires a MMseqs2 taxonomy database)
@@ -77,6 +82,7 @@ python3 scripts/YuggASMoth.py \
     --format png
 ```
 
-Expected: `test_cleaned.cleaned.fasta` retains `contig_001`, `contig_002`,
-`contig_006_GC_rich` (if not classified as bacterial by MMseqs2) and removes
-the rDNA-rich, tRNA-cluster, and duplicate sequences.
+Expected: `test_cleaned/results/mod04_filter_test_cleaned.cleaned.fasta`
+retains `contig_001`, `contig_002`, `contig_006_GC_rich` (if not classified
+as bacterial by MMseqs2) and removes the rDNA-rich, tRNA-cluster, and
+duplicate sequences.

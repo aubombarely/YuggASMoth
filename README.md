@@ -36,7 +36,7 @@ conda create -n yuggasmoth python=3.10
 conda activate yuggasmoth
 
 # Python packages
-conda install -c conda-forge matplotlib
+conda install -c conda-forge matplotlib codecarbon
 
 # Detection tools
 conda install -c bioconda barrnap trnascan-se mmseqs2 mash
@@ -45,10 +45,14 @@ conda install -c bioconda barrnap trnascan-se mmseqs2 mash
 | Package / Tool | Channel | Used by |
 |---|---|---|
 | `matplotlib` | conda-forge | Visualisation module |
+| `codecarbon` | conda-forge | Carbon footprint tracking (optional) |
 | `barrnap` | bioconda | rDNA / tRNA module |
 | `trnascan-se` | bioconda | rDNA / tRNA module |
 | `mmseqs2` | bioconda | Contamination module |
 | `mash` | bioconda | Duplication module |
+
+> `codecarbon` is optional — the pipeline runs normally without it; the
+> carbon footprint section of the report will simply be absent.
 
 ### MMseqs2 taxonomy database
 
@@ -95,20 +99,31 @@ YuggASMoth.py --fasta <assembly.fasta> --output <basename> --db <mmseqs2_db>
 
 ---
 
-## Output files
+## Output directory layout
 
-| File | Module | Description |
-|---|---|---|
-| `{out}.rDNA_tRNA.tsv` | 1 | Per-sequence rDNA / tRNA content table |
-| `{out}.rDNA_tRNA.pdf` | 1 | Scatter plot: % rDNA vs % tRNA, dot size ∝ length |
-| `{out}.contamination.tsv` | 2 | Per-sequence taxonomy classification |
-| `{out}.contamination.pdf` | 2 | Bar chart: sequence count per taxonomic group |
-| `{out}.duplications.tsv` | 3 | Flagged duplicate pairs with similarity scores |
-| `{out}.duplications.pdf` | 3 | Similarity histogram + kept/flagged pie chart |
-| `{out}.cleaned.fasta` | 4 | Assembly with flagged sequences removed |
-| `{out}.removed.tsv` | 4 | Removal log: seq_id, length, reason(s) per removed sequence |
-| `{out}.run_summary.json` | — | Run metadata, parameters, sequence counts |
-| `{out}_workdir/` | — | Intermediate files (barrnap GFF3, tRNAscan output, Mash sketch) |
+`--output yugg_run` creates:
+
+```
+yugg_run/
+├── results/
+│   ├── mod01_rDNAtDNA_yugg_run.tsv      Module 1 — rDNA/tRNA table
+│   ├── mod01_rDNAtDNA_yugg_run.pdf/.png Module 1 — scatter plot
+│   ├── mod02_contamination_yugg_run.tsv Module 2 — taxonomy table
+│   ├── mod02_contamination_yugg_run.pdf Module 2 — bar chart
+│   ├── mod03_duplications_yugg_run.tsv  Module 3 — duplicate pairs table
+│   ├── mod03_duplications_yugg_run.pdf  Module 3 — similarity histogram
+│   ├── mod04_filter_yugg_run.cleaned.fasta  Module 4 — cleaned assembly
+│   ├── mod04_filter_yugg_run.removed.tsv    Module 4 — removal log
+│   └── yugg_run.run_summary.json        Run metadata and resource usage
+├── workdir/                             Intermediate tool outputs
+│   ├── barrnap.gff3
+│   ├── trnascan.tsv / trnascan.ss
+│   ├── mmseqs_taxonomy_lca.tsv
+│   └── assembly.msh / mash_triangle.tsv
+└── logs/
+    ├── Run_YuggASMoth.log               Full run log (date, user, command, progress)
+    └── yugg_run.emissions.csv           Carbon footprint (requires codecarbon)
+```
 
 ### rDNA / tRNA table columns
 
@@ -163,8 +178,8 @@ YuggASMoth.py \
     --format pdf,png
 ```
 
-Review `yugg_inspect.rDNA_tRNA.tsv`, `yugg_inspect.contamination.tsv`,
-`yugg_inspect.duplications.tsv`, and the corresponding plots to decide on thresholds.
+Review the tables and plots under `yugg_inspect/results/` to decide on
+thresholds.  The full run log is at `yugg_inspect/logs/Run_YuggASMoth.log`.
 
 ### Step 2 — Apply thresholds and clean
 

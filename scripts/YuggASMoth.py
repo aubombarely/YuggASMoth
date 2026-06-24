@@ -15,6 +15,20 @@ Pipeline (all modules active by default):
     4. Filtering            — apply thresholds → cleaned FASTA + removal log
     5. Visualisation        — one figure per module (PDF/PNG/SVG)
 
+Output directory layout:
+    {output}/
+    ├── results/
+    │   ├── mod01_rDNAtDNA_{prefix}.tsv / .pdf/.png
+    │   ├── mod02_contamination_{prefix}.tsv / .pdf/.png
+    │   ├── mod03_duplications_{prefix}.tsv / .pdf/.png
+    │   ├── mod04_filter_{prefix}.cleaned.fasta
+    │   ├── mod04_filter_{prefix}.removed.tsv
+    │   └── {prefix}.run_summary.json
+    ├── workdir/            (intermediate tool outputs)
+    └── logs/
+        ├── Run_YuggASMoth.log
+        └── {prefix}.emissions.csv  (if codecarbon is installed)
+
 External tools required:
     barrnap       conda install -c bioconda barrnap
     tRNAscan-SE   conda install -c bioconda trnascan-se
@@ -22,35 +36,46 @@ External tools required:
     mash          conda install -c bioconda mash
 
 Python packages required:
-    pip install matplotlib
+    matplotlib    conda install -c conda-forge matplotlib
+    codecarbon    conda install -c conda-forge codecarbon  (optional)
 
 Usage
 -----
-    YuggASMoth.py --fasta assembly.fasta --output yugg_out --db mmseqs2_db
-    YuggASMoth.py --fasta assembly.fasta --output yugg_out --db mmseqs2_db \\
+    YuggASMoth.py --fasta assembly.fasta --output yugg_run --db mmseqs2_db
+    YuggASMoth.py --fasta assembly.fasta --output yugg_run --db mmseqs2_db \\
                   --threads 16 --rDNA_perc 50 --tDNA_perc 50 \\
                   --contam_taxa Fungi,Bacteria,Viruses \\
                   --dup_similarity 0.95 --format pdf,png
-    YuggASMoth.py --fasta assembly.fasta --output yugg_out \\
+    YuggASMoth.py --fasta assembly.fasta --output yugg_run \\
                   --skip_contamination --skip_duplications
 """
 
 import argparse
+import getpass
 import json
 import os
+import platform
+import resource
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
-VERSION = "v0.1.0"
+VERSION = "v0.2.0"
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
+_LOG_FH = None  # file handle opened in main() once the logs/ dir exists
+
+
 def _log(msg: str) -> None:
-    ts = datetime.now().strftime("%H:%M:%S")
-    print(f"[{ts}] {msg}", file=sys.stderr)
+    ts   = datetime.now().strftime("%H:%M:%S")
+    line = f"[{ts}] {msg}"
+    print(line, file=sys.stderr)
+    if _LOG_FH is not None:
+        print(line, file=_LOG_FH, flush=True)
 
 
 def _banner(title: str) -> None:
@@ -138,7 +163,7 @@ def run_trnascan(fasta: Path, out_tsv: Path, out_ss: Path,
 
 
 def _parse_gff_lengths(gff_path: Path) -> dict:
-    """Return {seq_id: total_bp_covered} from a GFF3 (non-comment, non-FASTA lines)."""
+    """Return {seq_id: total_bp_covered} from a GFF3."""
     from collections import defaultdict
     cov = defaultdict(int)
     with open(gff_path) as fh:
@@ -176,7 +201,7 @@ def _parse_trnascan(tsv_path: Path) -> tuple:
     Returns ({seq_id: count}, {seq_id: total_bp}).
     """
     from collections import defaultdict
-    counts = defaultdict(int)
+    counts  = defaultdict(int)
     lengths = defaultdict(int)
     with open(tsv_path) as fh:
         for line in fh:
@@ -191,7 +216,7 @@ def _parse_trnascan(tsv_path: Path) -> tuple:
                 sid   = parts[0]
                 start = int(parts[2])
                 end   = int(parts[3])
-                counts[sid] += 1
+                counts[sid]  += 1
                 lengths[sid] += abs(end - start) + 1
             except (ValueError, IndexError):
                 continue
@@ -200,32 +225,28 @@ def _parse_trnascan(tsv_path: Path) -> tuple:
 
 def build_rDNA_tRNA_table(seqs: dict, barrnap_gff: Path,
                           trnascan_tsv: Path) -> list:
-    """
-    Build per-sequence rDNA/tRNA stats table.
-    Returns list of dicts (one per sequence).
-    """
     rdna_counts  = _count_gff_features(barrnap_gff)
     rdna_lengths = _parse_gff_lengths(barrnap_gff)
     trna_counts, trna_lengths = _parse_trnascan(trnascan_tsv)
 
     rows = []
     for sid, seq in seqs.items():
-        seq_len   = len(seq)
-        r_count   = rdna_counts.get(sid, 0)
-        r_bp      = rdna_lengths.get(sid, 0)
-        t_count   = trna_counts.get(sid, 0)
-        t_bp      = trna_lengths.get(sid, 0)
-        perc_r    = round(r_bp / seq_len * 100, 4) if seq_len > 0 else 0.0
-        perc_t    = round(t_bp / seq_len * 100, 4) if seq_len > 0 else 0.0
+        seq_len = len(seq)
+        r_count = rdna_counts.get(sid, 0)
+        r_bp    = rdna_lengths.get(sid, 0)
+        t_count = trna_counts.get(sid, 0)
+        t_bp    = trna_lengths.get(sid, 0)
+        perc_r  = round(r_bp / seq_len * 100, 4) if seq_len > 0 else 0.0
+        perc_t  = round(t_bp / seq_len * 100, 4) if seq_len > 0 else 0.0
         rows.append({
-            "seq_id":         sid,
-            "seq_length":     seq_len,
-            "rDNA_count":     r_count,
-            "tDNA_count":     t_count,
-            "rDNA_bp":        r_bp,
-            "tDNA_bp":        t_bp,
-            "perc_rDNA":      perc_r,
-            "perc_tDNA":      perc_t,
+            "seq_id":     sid,
+            "seq_length": seq_len,
+            "rDNA_count": r_count,
+            "tDNA_count": t_count,
+            "rDNA_bp":    r_bp,
+            "tDNA_bp":    t_bp,
+            "perc_rDNA":  perc_r,
+            "perc_tDNA":  perc_t,
         })
     return rows
 
@@ -242,18 +263,17 @@ def write_rDNA_tRNA_table(rows: list, path: Path) -> None:
 
 # ── Module 2: Contamination (MMseqs2) ─────────────────────────────────────────
 
-def run_mmseqs_taxonomy(fasta: Path, db: str, out_dir: Path,
+def run_mmseqs_taxonomy(fasta: Path, db: str, workdir: Path,
                         threads: int) -> Path:
-    tool = _require_tool("mmseqs")
-    tmp  = out_dir / "mmseqs_tmp"
+    tool   = _require_tool("mmseqs")
+    tmp    = workdir / "mmseqs_tmp"
     tmp.mkdir(parents=True, exist_ok=True)
-    prefix = out_dir / "mmseqs_taxonomy"
+    prefix = workdir / "mmseqs_taxonomy"
 
     _run([tool, "easy-taxonomy", str(fasta), db, str(prefix),
           str(tmp), "--threads", str(threads),
           "--tax-lineage", "2"])
 
-    # easy-taxonomy writes {prefix}_tophit_report and {prefix}_lca.tsv
     lca_tsv = Path(f"{prefix}_lca.tsv")
     if not lca_tsv.exists():
         print(f"ERROR: MMseqs2 LCA output not found: {lca_tsv}", file=sys.stderr)
@@ -274,11 +294,11 @@ def parse_mmseqs_lca(lca_tsv: Path, seqs: dict) -> list:
             parts = line.rstrip("\n").split("\t")
             if len(parts) < 4:
                 continue
-            sid      = parts[0]
-            taxid    = parts[1]
-            rank     = parts[2]
-            name     = parts[3]
-            lineage  = parts[4] if len(parts) > 4 else ""
+            sid     = parts[0]
+            taxid   = parts[1]
+            rank    = parts[2]
+            name    = parts[3]
+            lineage = parts[4] if len(parts) > 4 else ""
             classifications[sid] = {
                 "taxid":   taxid,
                 "rank":    rank,
@@ -290,12 +310,12 @@ def parse_mmseqs_lca(lca_tsv: Path, seqs: dict) -> list:
     for sid, seq in seqs.items():
         info = classifications.get(sid, {})
         rows.append({
-            "seq_id":    sid,
+            "seq_id":     sid,
             "seq_length": len(seq),
-            "taxid":     info.get("taxid", "0"),
-            "rank":      info.get("rank", "no rank"),
-            "top_taxon": info.get("name", "unclassified"),
-            "lineage":   info.get("lineage", ""),
+            "taxid":      info.get("taxid", "0"),
+            "rank":       info.get("rank", "no rank"),
+            "top_taxon":  info.get("name", "unclassified"),
+            "lineage":    info.get("lineage", ""),
         })
     return rows
 
@@ -311,11 +331,11 @@ def write_contamination_table(rows: list, path: Path) -> None:
 
 # ── Module 3: Duplication (Mash) ──────────────────────────────────────────────
 
-def run_mash(fasta: Path, out_dir: Path, threads: int,
+def run_mash(fasta: Path, workdir: Path, threads: int,
              sketch_size: int = 1000) -> Path:
-    tool    = _require_tool("mash")
-    sketch  = out_dir / "assembly.msh"
-    dist_tsv = out_dir / "mash_triangle.tsv"
+    tool      = _require_tool("mash")
+    sketch    = workdir / "assembly.msh"
+    dist_tsv  = workdir / "mash_triangle.tsv"
 
     _run([tool, "sketch", "-s", str(sketch_size),
           "-p", str(threads), "-o", str(sketch), str(fasta)])
@@ -332,8 +352,7 @@ def parse_mash_triangle(dist_tsv: Path, seqs: dict,
                         sim_threshold: float) -> list:
     """
     Parse Mash lower-triangular distance matrix.
-    Returns list of flagged pairs: {seq_id1, seq_id2, distance, similarity,
-    length1, length2, keep}.
+    Returns list of flagged pairs above sim_threshold.
     """
     seq_lengths = {sid: len(seq) for sid, seq in seqs.items()}
     pairs = []
@@ -344,14 +363,13 @@ def parse_mash_triangle(dist_tsv: Path, seqs: dict,
     if not lines:
         return pairs
 
-    # First line is the number of sequences; subsequent lines are distance rows
     try:
         n = int(lines[0].strip())
     except ValueError:
         n = None
 
     data_lines = lines[1:] if n is not None else lines
-    seq_ids = []
+    seq_ids    = []
 
     for i, line in enumerate(data_lines):
         parts = line.split("\t")
@@ -366,12 +384,11 @@ def parse_mash_triangle(dist_tsv: Path, seqs: dict,
                 continue
             sim = round(1.0 - dist, 6)
             if sim >= sim_threshold:
-                sid2  = seq_ids[j]
-                len1  = seq_lengths.get(sid1, 0)
-                len2  = seq_lengths.get(sid2, 0)
-                # Keep the longer sequence
-                keep  = sid1 if len1 >= len2 else sid2
-                flag  = sid2 if keep == sid1 else sid1
+                sid2 = seq_ids[j]
+                len1 = seq_lengths.get(sid1, 0)
+                len2 = seq_lengths.get(sid2, 0)
+                keep = sid1 if len1 >= len2 else sid2
+                flag = sid2 if keep == sid1 else sid1
                 pairs.append({
                     "seq_id1":    sid1,
                     "seq_id2":    sid2,
@@ -406,20 +423,18 @@ def apply_filters(seqs: dict,
                   tDNA_perc: float,
                   contam_taxa: list,
                   dup_similarity: float) -> tuple:
-    """
-    Returns (cleaned_seqs dict, removal_log list of dicts).
-    """
-    remove = {}  # {seq_id: reason}
+    """Returns (cleaned_seqs dict, removal_log list of dicts)."""
+    remove = {}
 
     if rdna_rows:
         for r in rdna_rows:
             sid = r["seq_id"]
             if r["perc_rDNA"] > rDNA_perc:
-                remove[sid] = remove.get(sid, [])
-                remove[sid].append(f"rDNA>{rDNA_perc}% ({r['perc_rDNA']}%)")
+                remove.setdefault(sid, []).append(
+                    f"rDNA>{rDNA_perc}% ({r['perc_rDNA']}%)")
             if r["perc_tDNA"] > tDNA_perc:
-                remove[sid] = remove.get(sid, [])
-                remove[sid].append(f"tDNA>{tDNA_perc}% ({r['perc_tDNA']}%)")
+                remove.setdefault(sid, []).append(
+                    f"tDNA>{tDNA_perc}% ({r['perc_tDNA']}%)")
 
     if contam_rows and contam_taxa:
         taxa_lower = [t.strip().lower() for t in contam_taxa]
@@ -429,27 +444,21 @@ def apply_filters(seqs: dict,
             taxon   = r["top_taxon"].lower()
             for t in taxa_lower:
                 if t in lineage or t in taxon:
-                    remove[sid] = remove.get(sid, [])
-                    remove[sid].append(f"contamination:{r['top_taxon']}")
+                    remove.setdefault(sid, []).append(
+                        f"contamination:{r['top_taxon']}")
                     break
 
     if dup_pairs:
         for p in dup_pairs:
             sid = p["flag"]
-            if sid not in remove:
-                remove[sid] = []
-            remove[sid].append(
-                f"duplicate of {p['keep']} (similarity={p['similarity']})"
-            )
+            remove.setdefault(sid, []).append(
+                f"duplicate of {p['keep']} (similarity={p['similarity']})")
 
-    removal_log = []
-    for sid, reasons in remove.items():
-        removal_log.append({
-            "seq_id":  sid,
-            "length":  len(seqs.get(sid, "")),
-            "reasons": "; ".join(reasons),
-        })
-
+    removal_log = [
+        {"seq_id": sid, "length": len(seqs.get(sid, "")),
+         "reasons": "; ".join(reasons)}
+        for sid, reasons in remove.items()
+    ]
     cleaned = {sid: seq for sid, seq in seqs.items() if sid not in remove}
     return cleaned, removal_log
 
@@ -464,17 +473,18 @@ def write_removal_log(removal_log: list, path: Path) -> None:
 
 # ── Module 5: Visualisation ───────────────────────────────────────────────────
 
-def _save_fig(fig, output_base: str, tag: str, formats: list) -> None:
+def _save_fig(fig, path_base: Path, formats: list) -> None:
+    """Save figure in each requested format. path_base has no extension."""
     import matplotlib.pyplot as plt
     for fmt in formats:
-        path = Path(f"{output_base}.{tag}.{fmt}")
+        path = Path(str(path_base) + f".{fmt}")
         dpi  = 150 if fmt == "png" else None
         fig.savefig(path, dpi=dpi, bbox_inches="tight")
         _log(f"  Plot saved: {path}")
     plt.close(fig)
 
 
-def plot_rDNA_tRNA(rows: list, output_base: str, formats: list,
+def plot_rDNA_tRNA(rows: list, path_base: Path, formats: list,
                    rDNA_perc: float, tDNA_perc: float) -> None:
     import matplotlib.pyplot as plt
 
@@ -486,8 +496,8 @@ def plot_rDNA_tRNA(rows: list, output_base: str, formats: list,
     colors  = ["#d62728" if f else "#1f77b4" for f in flagged]
 
     fig, ax = plt.subplots(figsize=(7, 6))
-    sc = ax.scatter(pct_r, pct_t, s=sizes, c=colors, alpha=0.7, linewidths=0.3,
-                    edgecolors="white")
+    ax.scatter(pct_r, pct_t, s=sizes, c=colors, alpha=0.7, linewidths=0.3,
+               edgecolors="white")
     ax.axvline(rDNA_perc, color="#d62728", linestyle="--", linewidth=0.8,
                label=f"rDNA threshold ({rDNA_perc}%)")
     ax.axhline(tDNA_perc, color="#ff7f0e", linestyle="--", linewidth=0.8,
@@ -498,30 +508,25 @@ def plot_rDNA_tRNA(rows: list, output_base: str, formats: list,
                  fontsize=11)
 
     from matplotlib.lines import Line2D
-    legend_elements = [
+    ax.legend(handles=[
         Line2D([0], [0], marker="o", color="w", markerfacecolor="#1f77b4",
                markersize=8, label="kept"),
         Line2D([0], [0], marker="o", color="w", markerfacecolor="#d62728",
                markersize=8, label="flagged"),
-    ]
-    ax.legend(handles=legend_elements + [
         Line2D([0], [0], color="#d62728", linestyle="--", label=f"rDNA >{rDNA_perc}%"),
         Line2D([0], [0], color="#ff7f0e", linestyle="--", label=f"tDNA >{tDNA_perc}%"),
     ], fontsize=9, frameon=True)
-
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    _save_fig(fig, output_base, "rDNA_tRNA", formats)
+    _save_fig(fig, path_base, formats)
 
 
-def plot_contamination(rows: list, output_base: str, formats: list,
+def plot_contamination(rows: list, path_base: Path, formats: list,
                        contam_taxa: list) -> None:
     import matplotlib.pyplot as plt
     from collections import Counter
 
-    # Group sequences by the MMseqs2 LCA taxon name (top_taxon).
-    # Using top_taxon directly is more reliable than parsing the lineage string,
-    # which can contain numeric taxon IDs depending on the --tax-lineage flag.
+    # Group by MMseqs2 LCA taxon name — more reliable than parsing numeric lineage.
     def _top_group(row):
         name = (row.get("top_taxon") or "").strip()
         if not name or name in ("0", "unclassified", "no rank"):
@@ -532,29 +537,25 @@ def plot_contamination(rows: list, output_base: str, formats: list,
     labels = [k for k, _ in counts.most_common(15)]
     values = [counts[l] for l in labels]
 
-    # Highlight contamination taxa
     taxa_lower = [t.lower() for t in contam_taxa]
-    bar_colors = []
-    for label in labels:
-        if any(t in label.lower() for t in taxa_lower):
-            bar_colors.append("#d62728")
-        else:
-            bar_colors.append("#1f77b4")
+    bar_colors = [
+        "#d62728" if any(t in lbl.lower() for t in taxa_lower) else "#1f77b4"
+        for lbl in labels
+    ]
 
     fig, ax = plt.subplots(figsize=(9, 5))
-    bars = ax.barh(labels[::-1], values[::-1], color=bar_colors[::-1],
-                   edgecolor="white", linewidth=0.5)
+    ax.barh(labels[::-1], values[::-1], color=bar_colors[::-1],
+            edgecolor="white", linewidth=0.5)
     ax.set_xlabel("Number of sequences", fontsize=11)
     ax.set_title("Taxonomic classification of assembly sequences\n"
                  "(red = flagged contamination taxa)", fontsize=11)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-
-    _save_fig(fig, output_base, "contamination", formats)
+    _save_fig(fig, path_base, formats)
 
 
 def plot_duplications(pairs: list, all_seqs: dict,
-                      output_base: str, formats: list,
+                      path_base: Path, formats: list,
                       dup_similarity: float) -> None:
     import matplotlib.pyplot as plt
 
@@ -569,7 +570,6 @@ def plot_duplications(pairs: list, all_seqs: dict,
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 5))
 
-    # Histogram of pairwise similarities
     ax1.hist(similarities, bins=30, color="#1f77b4", edgecolor="white",
              linewidth=0.5)
     ax1.axvline(dup_similarity, color="#d62728", linestyle="--", linewidth=1.2,
@@ -581,7 +581,6 @@ def plot_duplications(pairs: list, all_seqs: dict,
     ax1.spines["top"].set_visible(False)
     ax1.spines["right"].set_visible(False)
 
-    # Pie chart: kept vs flagged
     kept = n_total - n_flagged
     ax2.pie([kept, n_flagged],
             labels=[f"Kept ({kept})", f"Flagged ({n_flagged})"],
@@ -591,20 +590,22 @@ def plot_duplications(pairs: list, all_seqs: dict,
     ax2.set_title("Assembly sequences", fontsize=11)
 
     fig.suptitle("Duplication analysis (Mash)", fontsize=12, y=1.01)
-    _save_fig(fig, output_base, "duplications", formats)
+    _save_fig(fig, path_base, formats)
 
 
 # ── Run summary ───────────────────────────────────────────────────────────────
 
 def write_run_summary(args, seqs: dict, cleaned: dict | None,
-                      removal_log: list | None, output_base: str) -> None:
+                      removal_log: list | None, path: Path,
+                      elapsed_s: float, peak_mem_mb: float,
+                      emissions_kg: float | None) -> None:
     summary = {
-        "date":              datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "version":           VERSION,
-        "input_fasta":       str(args.fasta),
-        "n_input_sequences": len(seqs),
+        "date":                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "version":             VERSION,
+        "input_fasta":         str(args.fasta),
+        "n_input_sequences":   len(seqs),
         "n_cleaned_sequences": len(cleaned) if cleaned is not None else None,
-        "n_removed":         len(removal_log) if removal_log is not None else None,
+        "n_removed":           len(removal_log) if removal_log is not None else None,
         "parameters": {
             "threads":        args.threads,
             "rDNA_perc":      args.rDNA_perc,
@@ -613,13 +614,17 @@ def write_run_summary(args, seqs: dict, cleaned: dict | None,
             "dup_similarity": args.dup_similarity,
         },
         "modules_run": {
-            "rDNA_tRNA":      not args.skip_rDNA_tRNA,
-            "contamination":  not args.skip_contamination,
-            "duplications":   not args.skip_duplications,
-            "filtering":      not args.skip_filtering,
+            "rDNA_tRNA":     not args.skip_rDNA_tRNA,
+            "contamination": not args.skip_contamination,
+            "duplications":  not args.skip_duplications,
+            "filtering":     not args.skip_filtering,
+        },
+        "resource_usage": {
+            "wall_clock_s":   round(elapsed_s, 1),
+            "peak_mem_mb":    round(peak_mem_mb, 1),
+            "emissions_kg_CO2eq": emissions_kg,
         },
     }
-    path = Path(f"{output_base}.run_summary.json")
     with open(path, "w") as fh:
         json.dump(summary, fh, indent=2)
         fh.write("\n")
@@ -637,7 +642,7 @@ def main(argv=None):
     ap.add_argument("--fasta",    required=True, type=Path,
                     help="Input genome assembly FASTA")
     ap.add_argument("--output",   required=True,
-                    help="Output basename / prefix")
+                    help="Output directory name / run prefix")
     ap.add_argument("--db",       default=None,
                     help="MMseqs2 taxonomy database path (required unless "
                          "--skip_contamination)")
@@ -672,27 +677,68 @@ def main(argv=None):
     ap.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     args = ap.parse_args(argv)
 
-    # Validation
+    # ── Validation ────────────────────────────────────────────────────────────
     if not args.fasta.exists():
         print(f"ERROR: --fasta not found: {args.fasta}", file=sys.stderr)
         sys.exit(1)
-
     if not args.skip_contamination and args.db is None:
         print("ERROR: --db is required unless --skip_contamination is set.",
               file=sys.stderr)
         sys.exit(1)
 
-    formats      = [f.strip().lower() for f in args.format.split(",")]
-    contam_taxa  = [t.strip() for t in args.contam_taxa.split(",") if t.strip()]
-    out_base     = args.output
-    out_dir      = Path(out_base + "_workdir")
-    out_dir.mkdir(parents=True, exist_ok=True)
+    formats     = [f.strip().lower() for f in args.format.split(",")]
+    contam_taxa = [t.strip() for t in args.contam_taxa.split(",") if t.strip()]
 
+    # ── Directory layout ──────────────────────────────────────────────────────
+    run_dir  = Path(args.output)
+    results  = run_dir / "results"
+    workdir  = run_dir / "workdir"
+    logs_dir = run_dir / "logs"
+    for d in (results, workdir, logs_dir):
+        d.mkdir(parents=True, exist_ok=True)
+
+    prefix = run_dir.name  # used in output file names
+
+    # ── Log file ──────────────────────────────────────────────────────────────
+    global _LOG_FH
+    log_path = logs_dir / "Run_YuggASMoth.log"
+    _LOG_FH  = open(log_path, "w")
+
+    sep = "=" * 62
+    _LOG_FH.write(f"{sep}\n  YuggASMoth {VERSION}  —  Run Log\n{sep}\n")
+    _LOG_FH.write(f"Date      : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    _LOG_FH.write(f"User      : {getpass.getuser()}\n")
+    _LOG_FH.write(f"Directory : {os.getcwd()}\n")
+    _LOG_FH.write(f"Command   : {' '.join(sys.argv)}\n")
+    _LOG_FH.write(f"{sep}\n\n")
+    _LOG_FH.flush()
+
+    # ── Carbon footprint tracker (optional) ───────────────────────────────────
+    _tracker = None
+    try:
+        from codecarbon import EmissionsTracker
+        _tracker = EmissionsTracker(
+            output_dir=str(logs_dir),
+            output_file=f"{prefix}.emissions.csv",
+            project_name="YuggASMoth",
+            log_level="warning",
+        )
+        _tracker.start()
+        _log("  codecarbon tracker started")
+    except ImportError:
+        _log("  codecarbon not installed — carbon tracking skipped "
+             "(conda install -c conda-forge codecarbon)")
+
+    t_start = time.monotonic()
+
+    # ── Start ─────────────────────────────────────────────────────────────────
     _banner(f"YuggASMoth  {VERSION}")
-    _log(f"Input  : {args.fasta}")
-    _log(f"Output : {out_base}.*")
+    _log(f"Input    : {args.fasta}")
+    _log(f"Output   : {run_dir}/")
+    _log(f"  results/ → tables and figures")
+    _log(f"  workdir/ → intermediate tool outputs")
+    _log(f"  logs/    → run log and carbon footprint")
 
-    # Load assembly
     _log("Loading assembly ...")
     seqs = load_fasta(args.fasta)
     _log(f"  {len(seqs)} sequences loaded")
@@ -704,59 +750,94 @@ def main(argv=None):
     # ── Module 1: rDNA / tRNA ─────────────────────────────────────────────────
     if not args.skip_rDNA_tRNA:
         _banner("Module 1: rDNA / tRNA detection")
-        barrnap_gff    = out_dir / "barrnap.gff3"
-        trnascan_tsv   = out_dir / "trnascan.tsv"
-        trnascan_ss    = out_dir / "trnascan.ss"
-        rdna_tRNA_tsv  = Path(f"{out_base}.rDNA_tRNA.tsv")
+        barrnap_gff   = workdir / "barrnap.gff3"
+        trnascan_tsv  = workdir / "trnascan.tsv"
+        trnascan_ss   = workdir / "trnascan.ss"
+        out_tsv       = results / f"mod01_rDNAtDNA_{prefix}.tsv"
+        out_fig       = results / f"mod01_rDNAtDNA_{prefix}"
 
         run_barrnap(args.fasta, barrnap_gff, args.threads)
         run_trnascan(args.fasta, trnascan_tsv, trnascan_ss, args.threads)
         rdna_rows = build_rDNA_tRNA_table(seqs, barrnap_gff, trnascan_tsv)
-        write_rDNA_tRNA_table(rdna_rows, rdna_tRNA_tsv)
-        plot_rDNA_tRNA(rdna_rows, out_base, formats,
-                       args.rDNA_perc, args.tDNA_perc)
+        write_rDNA_tRNA_table(rdna_rows, out_tsv)
+        plot_rDNA_tRNA(rdna_rows, out_fig, formats, args.rDNA_perc, args.tDNA_perc)
 
     # ── Module 2: Contamination ───────────────────────────────────────────────
     if not args.skip_contamination:
         _banner("Module 2: Contamination (MMseqs2)")
-        contam_tsv = Path(f"{out_base}.contamination.tsv")
-        lca_tsv    = run_mmseqs_taxonomy(args.fasta, args.db, out_dir,
-                                         args.threads)
+        out_tsv = results / f"mod02_contamination_{prefix}.tsv"
+        out_fig = results / f"mod02_contamination_{prefix}"
+
+        lca_tsv     = run_mmseqs_taxonomy(args.fasta, args.db, workdir, args.threads)
         contam_rows = parse_mmseqs_lca(lca_tsv, seqs)
-        write_contamination_table(contam_rows, contam_tsv)
-        plot_contamination(contam_rows, out_base, formats, contam_taxa)
+        write_contamination_table(contam_rows, out_tsv)
+        plot_contamination(contam_rows, out_fig, formats, contam_taxa)
 
     # ── Module 3: Duplications ────────────────────────────────────────────────
     if not args.skip_duplications:
         _banner("Module 3: Duplication detection (Mash)")
-        dup_tsv    = Path(f"{out_base}.duplications.tsv")
-        dist_tsv   = run_mash(args.fasta, out_dir, args.threads)
-        dup_pairs  = parse_mash_triangle(dist_tsv, seqs, args.dup_similarity)
-        write_duplication_table(dup_pairs, dup_tsv)
-        plot_duplications(dup_pairs, seqs, out_base, formats, args.dup_similarity)
+        out_tsv  = results / f"mod03_duplications_{prefix}.tsv"
+        out_fig  = results / f"mod03_duplications_{prefix}"
+
+        dist_tsv  = run_mash(args.fasta, workdir, args.threads)
+        dup_pairs = parse_mash_triangle(dist_tsv, seqs, args.dup_similarity)
+        write_duplication_table(dup_pairs, out_tsv)
+        plot_duplications(dup_pairs, seqs, out_fig, formats, args.dup_similarity)
 
     # ── Module 4: Filtering ───────────────────────────────────────────────────
-    cleaned      = None
-    removal_log  = None
+    cleaned     = None
+    removal_log = None
     if not args.skip_filtering:
         _banner("Module 4: Filtering")
         cleaned, removal_log = apply_filters(
             seqs, rdna_rows, contam_rows, dup_pairs,
             args.rDNA_perc, args.tDNA_perc, contam_taxa, args.dup_similarity,
         )
-        cleaned_fasta = Path(f"{out_base}.cleaned.fasta")
-        removal_tsv   = Path(f"{out_base}.removed.tsv")
-        write_fasta(cleaned, cleaned_fasta)
-        write_removal_log(removal_log, removal_tsv)
-        _log(f"  Cleaned FASTA → {cleaned_fasta}")
-        _log(f"  {len(seqs)} input → {len(cleaned)} kept, {len(removal_log)} removed")
+        write_fasta(cleaned, results / f"mod04_filter_{prefix}.cleaned.fasta")
+        write_removal_log(removal_log, results / f"mod04_filter_{prefix}.removed.tsv")
+        _log(f"  {len(seqs)} input → {len(cleaned)} kept, "
+             f"{len(removal_log)} removed")
     else:
-        _log("Filtering skipped (--skip_filtering); inspect tables before re-running.")
+        _log("Filtering skipped (--skip_filtering); "
+             "inspect tables before re-running.")
 
-    # ── Run summary ───────────────────────────────────────────────────────────
-    write_run_summary(args, seqs, cleaned, removal_log, out_base)
+    # ── Resource and carbon usage ─────────────────────────────────────────────
+    elapsed_s = time.monotonic() - t_start
+    ru        = resource.getrusage(resource.RUSAGE_SELF)
+    # ru_maxrss is bytes on macOS, kilobytes on Linux
+    if platform.system() == "Darwin":
+        peak_mem_mb = ru.ru_maxrss / (1024 * 1024)
+    else:
+        peak_mem_mb = ru.ru_maxrss / 1024
+
+    emissions_kg = None
+    if _tracker is not None:
+        try:
+            emissions_kg = _tracker.stop()
+        except Exception:
+            pass
+
+    _banner("Resource usage")
+    _log(f"  Wall-clock time   : {elapsed_s:.1f} s  "
+         f"({elapsed_s/60:.1f} min)")
+    _log(f"  Peak memory (RSS) : {peak_mem_mb:.1f} MB")
+    if emissions_kg is not None:
+        _log(f"  Carbon footprint  : {emissions_kg:.6f} kg CO2eq")
+        _log(f"  Emissions log     : {logs_dir}/{prefix}.emissions.csv")
+
+    # ── Run summary JSON ──────────────────────────────────────────────────────
+    write_run_summary(
+        args, seqs, cleaned, removal_log,
+        results / f"{prefix}.run_summary.json",
+        elapsed_s, peak_mem_mb, emissions_kg,
+    )
 
     _banner("Done")
+    _log(f"  Results → {results}/")
+    _log(f"  Log     → {log_path}")
+
+    if _LOG_FH is not None:
+        _LOG_FH.close()
 
 
 if __name__ == "__main__":
