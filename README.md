@@ -4,6 +4,12 @@
   <img src="assets/yuggasmoth_logo.svg" width="260" alt="YuggASMoth logo"/>
 </p>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/version-v0.2.0-teal" alt="Version v0.2.0"/>
+  <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+"/>
+  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey" alt="Platform"/>
+</p>
+
 **Surgical extraction of rDNA, tRNA, contamination and duplicate sequences from genome assemblies.**
 
 Named after Yuggoth — the outer world of the Mi-Go, fungal surgeons of the Lovecraft Mythos renowned for their precise extractions. Fungi are among the most common contaminants in plant genome assemblies; YuggASMoth removes them with equal surgical precision.
