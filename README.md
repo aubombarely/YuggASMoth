@@ -8,6 +8,7 @@
   <img src="https://img.shields.io/badge/version-v0.3.0-teal" alt="Version v0.3.0"/>
   <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+"/>
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey" alt="Platform"/>
+  <a href="https://doi.org/10.5281/zenodo.20828338"><img src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20828338-blue" alt="DOI"/></a>
 </p>
 
 <p align="center">
