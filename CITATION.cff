@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "YuggASMoth"
+abstract: >
+  YuggASMoth is a genome assembly cleaning pipeline that removes rDNA and tRNA
+  contaminants (barrnap), screens for cross-species contamination (MMseqs2
+  taxonomy), and flags near-duplicate sequences (Mash). Named after Yuggoth
+  (H.P. Lovecraft) + ASM (assembly).
+authors:
+  - family-names: Bombarely
+    given-names: Aureliano
+    email: aubombarely@gmail.com
+    orcid: ""
+version: "v0.3.0"
+date-released: "2026-06-24"
+license: MIT
+repository-code: "https://github.com/aubombarely/YuggASMoth"
+keywords:
+  - genome assembly
+  - contamination detection
+  - bioinformatics
+  - plant genomics
