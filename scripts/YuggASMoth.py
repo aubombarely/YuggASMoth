@@ -645,10 +645,10 @@ def main(argv=None):
                     help="CPU threads (default: 8)")
 
     # Thresholds
-    ap.add_argument("--rDNA_perc",      type=float, default=50.0,
-                    help="Flag sequences with %%rDNA above this value (default: 50)")
-    ap.add_argument("--tDNA_perc",      type=float, default=50.0,
-                    help="Flag sequences with %%tDNA above this value (default: 50)")
+    ap.add_argument("--rDNA_perc",      type=float, default=10.0,
+                    help="Flag sequences with %%rDNA above this value (default: 10)")
+    ap.add_argument("--tDNA_perc",      type=float, default=10.0,
+                    help="Flag sequences with %%tDNA above this value (default: 10)")
     ap.add_argument("--contam_taxa",    default="Bacteria,Viruses,Fungi",
                     help="Comma-separated taxa to flag as contamination "
                          "(default: Bacteria,Viruses,Fungi)")

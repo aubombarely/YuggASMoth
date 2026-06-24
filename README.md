@@ -83,8 +83,8 @@ YuggASMoth.py --fasta <assembly.fasta> --output <basename> --db <mmseqs2_db>
 | `--output` | required | Output basename / prefix |
 | `--db` | required* | MMseqs2 taxonomy database (*unless `--skip_contamination`) |
 | `--threads` | `8` | CPU threads |
-| `--rDNA_perc` | `50.0` | Flag sequences with % rDNA above this value |
-| `--tDNA_perc` | `50.0` | Flag sequences with % tDNA above this value |
+| `--rDNA_perc` | `10.0` | Flag sequences with % rDNA above this value |
+| `--tDNA_perc` | `10.0` | Flag sequences with % tDNA above this value |
 | `--contam_taxa` | `Bacteria,Viruses,Fungi` | Comma-separated taxa to flag as contamination |
 | `--dup_similarity` | `0.95` | Mash similarity threshold for duplicate flagging |
 | `--skip_rDNA_tRNA` | off | Skip Module 1 |
