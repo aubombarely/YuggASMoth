@@ -87,6 +87,24 @@ def _banner(title: str) -> None:
     _log(f"└{bar}┘")
 
 
+_QUOTE_LINES = [
+    "\"The process need not be painful or destructive. Under the proper",
+    " conditions, the brain is extracted from all distracting material",
+    " that surrounds it — and yet lives and thinks and feels and longs",
+    " for its beloved earth.\"",
+    "              — H.P. Lovecraft, The Whisperer in Darkness (1930)",
+]
+
+def _print_quote() -> None:
+    width = max(len(l) for l in _QUOTE_LINES) + 4
+    border = "─" * width
+    _log(f"┌{border}┐")
+    for line in _QUOTE_LINES:
+        padding = width - len(line) - 1
+        _log(f"│ {line}{' ' * padding}│")
+    _log(f"└{border}┘")
+
+
 # ── External tool helpers ─────────────────────────────────────────────────────
 
 def _require_tool(name: str) -> str:
@@ -658,6 +676,7 @@ def write_run_summary(args, seqs: dict, cleaned: dict | None,
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main(argv=None):
+    _print_quote()
     ap = argparse.ArgumentParser(
         prog="YuggASMoth",
         description="Surgical extraction of contamination from genome assemblies.",
