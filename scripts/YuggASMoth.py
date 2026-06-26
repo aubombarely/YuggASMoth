@@ -52,7 +52,7 @@ Usage
                   --disable_co2_tracking
 """
 
-import argparse
+import argparse, warnings
 import getpass
 import json
 import os
@@ -676,6 +676,7 @@ def write_run_summary(args, seqs: dict, cleaned: dict | None,
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main(argv=None):
+    warnings.filterwarnings("ignore", category=FutureWarning, module="pynvml")
     _print_quote()
     ap = argparse.ArgumentParser(
         prog="YuggASMoth",
