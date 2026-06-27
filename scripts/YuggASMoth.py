@@ -52,7 +52,8 @@ Usage
                   --disable_co2_tracking
 """
 
-import argparse, warnings
+import argparse
+import warnings
 import getpass
 import json
 import os
@@ -676,7 +677,7 @@ def write_run_summary(args, seqs: dict, cleaned: dict | None,
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main(argv=None):
-    warnings.filterwarnings("ignore", category=FutureWarning, module="pynvml")
+    warnings.filterwarnings("ignore", category=FutureWarning, message=".*pynvml.*")
     _print_quote()
     ap = argparse.ArgumentParser(
         prog="YuggASMoth",
@@ -773,6 +774,29 @@ def main(argv=None):
         _log("  Carbon footprint tracking disabled (--disable_co2_tracking)")
     else:
         try:
+            try:
+                import pkg_resources  # noqa: F401
+            except ModuleNotFoundError:
+                import types as _t, importlib.metadata as _m, importlib as _il
+                from pathlib import Path as _P
+                _shim = _t.ModuleType("pkg_resources")
+                def _get_dist(name):
+                    try:
+                        d = _m.distribution(name)
+                        d.version = d.metadata["Version"]
+                        return d
+                    except Exception:
+                        return None
+                def _resource_filename(pkg, resource):
+                    try:
+                        mod = _il.import_module(pkg)
+                        return str(_P(mod.__file__).parent / resource)
+                    except Exception:
+                        return resource
+                _shim.get_distribution    = _get_dist
+                _shim.resource_filename   = _resource_filename
+                _shim.DistributionNotFound = Exception
+                sys.modules["pkg_resources"] = _shim
             from codecarbon import EmissionsTracker
             _tracker = EmissionsTracker(
                 output_dir=str(logs_dir),
@@ -782,9 +806,10 @@ def main(argv=None):
             )
             _tracker.start()
             _log("  codecarbon tracker started")
-        except ImportError:
-            _log("  codecarbon not installed — carbon tracking skipped "
-                 "(conda install -c conda-forge codecarbon)")
+        except ImportError as e:
+            _log(f"  codecarbon not installed — carbon tracking skipped ({e})")
+        except Exception as e:
+            _log(f"  codecarbon failed to start — carbon tracking skipped ({e})")
 
     t_start = time.monotonic()
 
