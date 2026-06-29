@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v0.3.0-teal" alt="Version v0.3.0"/>
+  <img src="https://img.shields.io/badge/version-v0.4.0-teal" alt="Version v0.4.0"/>
   <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+"/>
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey" alt="Platform"/>
   <a href="https://doi.org/10.5281/zenodo.20828338"><img src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20828338-blue" alt="DOI"/></a>
@@ -29,7 +29,7 @@ YuggASMoth runs up to four detection and filtering modules in a single command:
 
 | Module | Tool(s) | What it produces |
 |---|---|---|
-| **1. rDNA / tRNA** | barrnap + tRNAscan-SE | Per-sequence rRNA and tRNA content table + scatter plot |
+| **1. rDNA / tRNA** | barrnap + tRNAscan-SE (default) or pre-computed GFF3 (`--rDNA_gff3` / `--tRNA_gff3`) | Per-sequence rRNA and tRNA content table + scatter plot |
 | **2. Contamination** | MMseqs2 easy-taxonomy | Per-sequence taxonomy classification table + bar chart |
 | **3. Duplication** | Mash all-vs-all | Pairwise similarity table + histogram + pie chart |
 | **4. Filtering** | — | Cleaned FASTA + removal log (skippable for inspection) |
@@ -85,6 +85,7 @@ YuggASMoth.py --fasta <assembly.fasta> --output <run_dir> --db <mmseqs2_db>
               [--rDNA_perc 10] [--tDNA_perc 10]
               [--contam_taxa Bacteria,Viruses,Fungi]
               [--dup_similarity 0.95]
+              [--rDNA_gff3 <rRNA.gff3>] [--tRNA_gff3 <tRNA.gff3>]
               [--skip_rDNA_tRNA] [--skip_contamination] [--skip_duplications]
               [--skip_filtering]
               [--format pdf]
@@ -102,7 +103,9 @@ YuggASMoth.py --fasta <assembly.fasta> --output <run_dir> --db <mmseqs2_db>
 | `--tDNA_perc` | `10.0` | Flag sequences with % tDNA above this value |
 | `--contam_taxa` | `Bacteria,Viruses,Fungi` | Comma-separated taxa to flag as contamination |
 | `--dup_similarity` | `0.95` | Mash similarity threshold for duplicate flagging |
-| `--skip_rDNA_tRNA` | off | Skip Module 1 |
+| `--rDNA_gff3` | `None` | Pre-computed rRNA GFF3 (e.g. UbboTELORNA `mod02_rRNA_*.gff3`). Skips barrnap when provided. |
+| `--tRNA_gff3` | `None` | Pre-computed tRNA GFF3 (e.g. UbboTELORNA `mod03_tRNA_*.gff3`). Skips tRNAscan-SE when provided. |
+| `--skip_rDNA_tRNA` | off | Skip Module 1 entirely |
 | `--skip_contamination` | off | Skip Module 2 |
 | `--skip_duplications` | off | Skip Module 3 |
 | `--skip_filtering` | off | Skip Module 4 — produce tables/plots only |
@@ -129,8 +132,8 @@ yugg_run/
 │   ├── mod04_filter_yugg_run.removed.tsv    Module 4 — removal log
 │   └── yugg_run.run_summary.json        Run metadata and resource usage
 ├── workdir/                             Intermediate tool outputs
-│   ├── barrnap.gff3
-│   ├── trnascan.tsv / trnascan.ss
+│   ├── barrnap.gff3                 (absent when --rDNA_gff3 is used)
+│   ├── trnascan.tsv / trnascan.ss   (absent when --tRNA_gff3 is used)
 │   ├── mmseqs_taxonomy_lca.tsv
 │   └── assembly.msh / mash_triangle.tsv
 └── logs/
@@ -286,6 +289,42 @@ YuggASMoth.py --fasta assembly.fasta --output yugg_out \
               --skip_rDNA_tRNA --skip_duplications
 ```
 
+### Using UbboTELORNA output instead of barrnap + tRNAscan-SE
+
+barrnap can fail on sequences with low-complexity regions at their start
+(e.g. telomeric repeats), because nhmmer cannot initialise its profile model
+before the sequence becomes informative. [UbboTELORNA](https://github.com/aubombarely/UbboTELORNA)
+resolves this by masking repeats with tantan upstream of nhmmer, and uses
+ARAGORN (on the original unmasked sequence) for tRNA detection.
+
+Run UbboTELORNA first, then pass its GFF3 outputs to YuggASMoth:
+
+```bash
+# Step 1 — run UbboTELORNA on the assembly
+python3 scripts/UbboTELORNA.py \
+    --fasta assembly.fasta \
+    --output ubbo_run \
+    --kingdom euka \
+    --threads 16
+
+# Step 2 — pass UbboTELORNA output to YuggASMoth
+YuggASMoth.py \
+    --fasta assembly.fasta \
+    --output yugg_run \
+    --db /path/to/uniref90_db \
+    --threads 16 \
+    --rDNA_gff3 ubbo_run/results/mod02_rRNA_assembly.gff3 \
+    --tRNA_gff3 ubbo_run/results/mod03_tRNA_assembly.gff3 \
+    --skip_filtering \
+    --format pdf,png
+```
+
+When `--rDNA_gff3` or `--tRNA_gff3` is supplied:
+- barrnap / tRNAscan-SE is skipped for that source
+- The external GFF3 is parsed with the same GFF3 parser used for barrnap output
+- The source path is logged and recorded in `run_summary.json`
+- Both flags are independent — you can replace one source while keeping the other
+
 ---
 
 ## Test data and examples
@@ -326,8 +365,8 @@ python3 examples/generate_example_outputs.py
 
 ## Notes
 
-- **barrnap** scans for 5S, 5.8S, 18S, and 28S rRNA using HMMER models. Eukaryotic mode (`--kingdom euk`) is the default.
-- **tRNAscan-SE** is run in eukaryotic mode (`-E`). The secondary structure file is saved to `{output}/workdir/trnascan.ss`.
+- **barrnap** scans for 5S, 5.8S, 18S, and 28S rRNA using HMMER models. Eukaryotic mode (`--kingdom euk`) is the default. On assemblies where contigs start with telomeric or other low-complexity repeats, barrnap can fail to initialise its model — use `--rDNA_gff3` with UbboTELORNA output to avoid this.
+- **tRNAscan-SE** is run in eukaryotic mode (`-E`). The secondary structure file is saved to `{output}/workdir/trnascan.ss`. Use `--tRNA_gff3` to supply ARAGORN-based predictions from UbboTELORNA instead.
 - **MMseqs2 easy-taxonomy** translates sequences in all 6 frames and searches against the provided protein database; the LCA algorithm assigns a taxonomy per sequence. Run with `--tax-lineage 2` so the lineage column contains taxon names (not numeric IDs), which enables correct substring matching in contamination filtering.
 - **Mash** uses MinHash sketches (default sketch size 1000) for fast all-vs-all pairwise distance estimation. Similarity = 1 − Mash distance. When a duplicate pair is flagged, the shorter sequence is removed; the longer is kept.
 - All intermediate files are stored in `{output}/workdir/` and can be safely deleted after a successful run.
