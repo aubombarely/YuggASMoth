@@ -10,6 +10,8 @@ them with equal precision.
 
 Pipeline (all modules active by default):
     1. rDNA/tRNA detection  — barrnap + tRNAscan-SE → per-sequence table
+                              OR pre-computed GFF3 via --rDNA_gff3 / --tRNA_gff3
+                              (e.g. from UbboTELORNA mod02/mod03)
     2. Contamination        — MMseqs2 easy-taxonomy → per-sequence taxonomy
     3. Duplication          — Mash all-vs-all → pairwise similarity table
     4. Filtering            — apply thresholds → cleaned FASTA + removal log
@@ -50,6 +52,9 @@ Usage
                   --skip_contamination --skip_duplications
     YuggASMoth.py --fasta assembly.fasta --output yugg_run --db mmseqs2_db \\
                   --disable_co2_tracking
+    YuggASMoth.py --fasta assembly.fasta --output yugg_run --db mmseqs2_db \\
+                  --rDNA_gff3 ubbo_run/results/mod02_rRNA_genome.gff3 \\
+                  --tRNA_gff3 ubbo_run/results/mod03_tRNA_genome.gff3
 """
 
 import argparse
@@ -66,7 +71,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-VERSION = "v0.3.0"
+VERSION = "v0.4.0"
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -261,12 +266,10 @@ def _parse_trnascan(tsv_path: Path) -> tuple:
     return dict(counts), dict(lengths)
 
 
-def build_rDNA_tRNA_table(seqs: dict, barrnap_gff: Path,
-                          trnascan_tsv: Path) -> list:
-    rdna_counts  = _count_gff_features(barrnap_gff)
-    rdna_lengths = _parse_gff_lengths(barrnap_gff)
-    trna_counts, trna_lengths = _parse_trnascan(trnascan_tsv)
-
+def build_rDNA_tRNA_table(seqs: dict,
+                          rdna_counts: dict, rdna_lengths: dict,
+                          trna_counts: dict, trna_lengths: dict) -> list:
+    """Build per-sequence rDNA/tRNA stats from pre-parsed count/length dicts."""
     rows = []
     for sid, seq in seqs.items():
         seq_len = len(seq)
@@ -655,6 +658,8 @@ def write_run_summary(args, seqs: dict, cleaned: dict | None,
             "tDNA_perc":      args.tDNA_perc,
             "contam_taxa":    args.contam_taxa,
             "dup_similarity": args.dup_similarity,
+            "rDNA_gff3":      str(args.rDNA_gff3) if args.rDNA_gff3 else None,
+            "tRNA_gff3":      str(args.tRNA_gff3) if args.tRNA_gff3 else None,
         },
         "modules_run": {
             "rDNA_tRNA":     not args.skip_rDNA_tRNA,
@@ -705,6 +710,14 @@ def main(argv=None):
     ap.add_argument("--dup_similarity", type=float, default=0.95,
                     help="Mash similarity threshold for duplicates (default: 0.95)")
 
+    # External rDNA/tRNA GFF3 inputs (bypass barrnap / tRNAscan-SE)
+    ap.add_argument("--rDNA_gff3", default=None, type=Path,
+                    help="Pre-computed rRNA GFF3 file (e.g. UbboTELORNA "
+                         "mod02_rRNA output). Skips barrnap when provided.")
+    ap.add_argument("--tRNA_gff3", default=None, type=Path,
+                    help="Pre-computed tRNA GFF3 file (e.g. UbboTELORNA "
+                         "mod03_tRNA output). Skips tRNAscan-SE when provided.")
+
     # Module skipping
     ap.add_argument("--skip_rDNA_tRNA",     action="store_true",
                     help="Skip rDNA/tRNA detection module")
@@ -738,6 +751,16 @@ def main(argv=None):
         print("ERROR: --db is required unless --skip_contamination is set.",
               file=sys.stderr)
         sys.exit(1)
+    if args.rDNA_gff3 is not None:
+        args.rDNA_gff3 = args.rDNA_gff3.resolve()
+        if not args.rDNA_gff3.exists():
+            print(f"ERROR: --rDNA_gff3 not found: {args.rDNA_gff3}", file=sys.stderr)
+            sys.exit(1)
+    if args.tRNA_gff3 is not None:
+        args.tRNA_gff3 = args.tRNA_gff3.resolve()
+        if not args.tRNA_gff3.exists():
+            print(f"ERROR: --tRNA_gff3 not found: {args.tRNA_gff3}", file=sys.stderr)
+            sys.exit(1)
 
     formats     = [f.strip().lower() for f in args.format.split(",")]
     contam_taxa = [t.strip() for t in args.contam_taxa.split(",") if t.strip()]
@@ -838,15 +861,35 @@ def main(argv=None):
     # ── Module 1: rDNA / tRNA ─────────────────────────────────────────────────
     if not args.skip_rDNA_tRNA:
         _banner("Module 1: rDNA / tRNA detection")
-        barrnap_gff   = workdir / "barrnap.gff3"
-        trnascan_tsv  = workdir / "trnascan.tsv"
-        trnascan_ss   = workdir / "trnascan.ss"
-        out_tsv       = results / f"mod01_rDNAtDNA_{prefix}.tsv"
-        out_fig       = results / f"mod01_rDNAtDNA_{prefix}"
+        out_tsv = results / f"mod01_rDNAtDNA_{prefix}.tsv"
+        out_fig = results / f"mod01_rDNAtDNA_{prefix}"
 
-        run_barrnap(args.fasta, barrnap_gff, workdir, args.threads, args.force)
-        run_trnascan(args.fasta, trnascan_tsv, trnascan_ss, args.threads, args.force)
-        rdna_rows = build_rDNA_tRNA_table(seqs, barrnap_gff, trnascan_tsv)
+        # rDNA source — barrnap (default) or pre-computed GFF3
+        if args.rDNA_gff3 is not None:
+            _log(f"  rDNA source : pre-computed GFF3 (--rDNA_gff3) — skipping barrnap")
+            _log(f"    {args.rDNA_gff3}")
+            rdna_gff = args.rDNA_gff3
+        else:
+            rdna_gff = workdir / "barrnap.gff3"
+            run_barrnap(args.fasta, rdna_gff, workdir, args.threads, args.force)
+
+        rdna_counts  = _count_gff_features(rdna_gff)
+        rdna_lengths = _parse_gff_lengths(rdna_gff)
+
+        # tRNA source — tRNAscan-SE (default) or pre-computed GFF3
+        if args.tRNA_gff3 is not None:
+            _log(f"  tRNA source : pre-computed GFF3 (--tRNA_gff3) — skipping tRNAscan-SE")
+            _log(f"    {args.tRNA_gff3}")
+            trna_counts  = _count_gff_features(args.tRNA_gff3)
+            trna_lengths = _parse_gff_lengths(args.tRNA_gff3)
+        else:
+            trnascan_tsv = workdir / "trnascan.tsv"
+            trnascan_ss  = workdir / "trnascan.ss"
+            run_trnascan(args.fasta, trnascan_tsv, trnascan_ss, args.threads, args.force)
+            trna_counts, trna_lengths = _parse_trnascan(trnascan_tsv)
+
+        rdna_rows = build_rDNA_tRNA_table(
+            seqs, rdna_counts, rdna_lengths, trna_counts, trna_lengths)
         write_rDNA_tRNA_table(rdna_rows, out_tsv)
         plot_rDNA_tRNA(rdna_rows, out_fig, formats, args.rDNA_perc, args.tDNA_perc)
 

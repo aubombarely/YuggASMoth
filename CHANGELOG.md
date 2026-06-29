@@ -5,6 +5,37 @@ Dates follow ISO 8601 (YYYY-MM-DD). Changes are grouped by version and type.
 
 ---
 
+## [v0.4.0] — 2026-06-29
+
+### Added
+
+- **`--rDNA_gff3 PATH`** — accept a pre-computed rRNA GFF3 file (e.g. from
+  UbboTELORNA `mod02_rRNA_*.gff3`) as the rDNA source for Module 1. When
+  provided, barrnap is skipped entirely. This resolves barrnap's known failure
+  mode on sequences with low-complexity regions at their start (e.g. telomeric
+  repeats), where nhmmer fails to initialise its model. UbboTELORNA's upstream
+  tantan masking step avoids this problem before running nhmmer.
+- **`--tRNA_gff3 PATH`** — accept a pre-computed tRNA GFF3 file (e.g. from
+  UbboTELORNA `mod03_tRNA_*.gff3`) as the tRNA source for Module 1. When
+  provided, tRNAscan-SE is skipped entirely. UbboTELORNA uses ARAGORN on the
+  unmasked FASTA, which preserves tRNA cloverleaf structure signal.
+- Both flags are validated at startup (file must exist) and logged with full
+  path when active. The source used (barrnap/tRNAscan-SE or external GFF3) is
+  recorded in `run_summary.json` under `parameters.rDNA_gff3` /
+  `parameters.tRNA_gff3`.
+- `build_rDNA_tRNA_table()` refactored to accept pre-parsed count/length dicts
+  rather than file paths — the function is now format-agnostic; parsing is
+  handled in the caller based on the input source.
+
+### Changed
+
+- `build_rDNA_tRNA_table(seqs, barrnap_gff, trnascan_tsv)` →
+  `build_rDNA_tRNA_table(seqs, rdna_counts, rdna_lengths, trna_counts, trna_lengths)`.
+  Existing behaviour is unchanged when neither `--rDNA_gff3` nor `--tRNA_gff3`
+  is provided.
+
+---
+
 ## [v0.3.0] — 2026-06-24
 
 ### Added

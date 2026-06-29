@@ -3,7 +3,7 @@
 Genome assembly cleaner: detects and removes rDNA/tRNA-rich sequences,
 contamination (MMseqs2 taxonomy), and near-duplicate contigs (Mash).
 
-**Current version:** v0.3.0 — `scripts/YuggASMoth.py`
+**Current version:** v0.4.0 — `scripts/YuggASMoth.py`
 
 This project fully follows the shared coding blueprint at `../CLAUDE.md`.
 Apply those standards to any changes or additions here.
